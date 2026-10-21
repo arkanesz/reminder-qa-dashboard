@@ -176,15 +176,18 @@ def render_followup_section(
 
     st.markdown("---")
     st.caption("Kirim pesan follow-up ke WhatsApp reporter")
-    saved_phone = saved_phone_map.get(reporter)
+
+    phone_state_key = f"saved_phone_{reporter}"
+    if phone_state_key not in st.session_state:
+        st.session_state[phone_state_key] = saved_phone_map.get(reporter)
+    saved_phone = st.session_state[phone_state_key]
+
     default_phone = format_wa_number(saved_phone or phone_map.get(reporter, ""))
     wa_number = st.text_input(
         "Nomor WhatsApp reporter",
         value=default_phone,
         key=f"wa_num_{issue_code}",
     )
-    if saved_phone:
-        st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
     wa_message = st.text_area(
         "Pesan",
         value=build_wa_message(issue_code, title, status, days, hours, minutes, issue_link),
@@ -196,12 +199,17 @@ def render_followup_section(
         if formatted_number and formatted_number != saved_phone:
             backend.save_reporter_phone(reporter, formatted_number)
             cached_reporter_phones.clear()
+            st.session_state[phone_state_key] = formatted_number
+            saved_phone = formatted_number
         wa_link = (
             f"https://wa.me/{formatted_number}?text={urllib.parse.quote(wa_message)}"
         )
         st.link_button("Kirim WA ke Reporter", wa_link)
     else:
         st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
+
+    if saved_phone:
+        st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
 
 
 def show_lavender_connection_error(exc):
