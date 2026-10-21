@@ -226,6 +226,34 @@ def get_followups(issue_code):
         conn.close()
 
 
+def get_followups_batch(issue_codes):
+    issue_codes = list(issue_codes)
+    if not issue_codes:
+        return {}
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, issue_code, storage_path, whatsapp_number, note, uploaded_by, created_at
+                FROM qadash_followup_proof
+                WHERE issue_code = ANY(%s)
+                ORDER BY created_at DESC
+                """,
+                (issue_codes,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    result = {}
+    for fid, issue_code, storage_path, wa_number, note, uploaded_by, created_at in rows:
+        result.setdefault(issue_code, []).append(
+            (fid, storage_path, wa_number, note, uploaded_by, created_at)
+        )
+    return result
+
+
 def get_issue_codes_with_followups():
     conn = get_pg_connection()
     try:
@@ -288,6 +316,27 @@ def get_signed_url(storage_path, expires_in=3600):
     resp.raise_for_status()
     signed = resp.json()["signedURL"]
     return f"{os.environ['SUPABASE_URL']}/storage/v1{signed}"
+
+
+def get_signed_urls_batch(storage_paths, expires_in=3600):
+    paths = [p for p in storage_paths if p]
+    if not paths:
+        return {}
+    url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/sign/{BUCKET}"
+    resp = requests.post(
+        url,
+        headers=_storage_headers("application/json"),
+        data=json.dumps({"expiresIn": expires_in, "paths": paths}),
+        timeout=20,
+    )
+    resp.raise_for_status()
+    result = {}
+    for item in resp.json():
+        signed = item.get("signedURL")
+        path = item.get("path")
+        if signed and path:
+            result[path] = f"{os.environ['SUPABASE_URL']}/storage/v1{signed}"
+    return result
 
 
 def delete_screenshot(storage_path):

@@ -31,11 +31,6 @@ def cached_phone_map():
     return {name: phone for name, phone in rows if phone}
 
 
-@st.cache_data(ttl=30, show_spinner=False)
-def cached_followups(issue_code):
-    return backend.get_followups(issue_code)
-
-
 @st.cache_data(ttl=1800, show_spinner=False)
 def cached_signed_url(storage_path):
     return backend.get_signed_url(storage_path)
@@ -51,6 +46,16 @@ def cached_history_codes():
     return backend.get_issue_codes_with_followups()
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def cached_followups_batch(issue_codes):
+    return backend.get_followups_batch(issue_codes)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_signed_urls_batch(storage_paths):
+    return backend.get_signed_urls_batch(storage_paths)
+
+
 TICKET_LOOKUP_QUERY = """
 SELECT
   p.key || '-' || i.key_num AS issue_code,
@@ -62,6 +67,12 @@ LEFT JOIN projects p ON i.project_id = p.id
 LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
 WHERE (p.key || '-' || i.key_num) = ANY(%(codes)s)
 """
+
+
+def clear_proof_state():
+    for key in list(st.session_state.keys()):
+        if key.startswith("proofs_state_"):
+            del st.session_state[key]
 
 
 def format_wa_number(raw):
@@ -89,8 +100,21 @@ def build_wa_message(issue_code, title, status, days, hours, minutes, issue_link
 
 
 @st.fragment
-def render_followup_section(issue_code, current_user_email, wa_context=None, phone_map=None, saved_phone_map=None):
-    proofs = cached_followups(issue_code)
+def render_followup_section(
+    issue_code,
+    current_user_email,
+    initial_proofs=(),
+    initial_signed_urls=None,
+    wa_context=None,
+    phone_map=None,
+    saved_phone_map=None,
+):
+    initial_signed_urls = initial_signed_urls or {}
+    state_key = f"proofs_state_{issue_code}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = list(initial_proofs)
+    proofs = st.session_state[state_key]
+
     if proofs:
         st.caption("Bukti follow-up sebelumnya:")
         for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
@@ -98,7 +122,10 @@ def render_followup_section(issue_code, current_user_email, wa_context=None, pho
             with cols[0]:
                 if storage_path:
                     try:
-                        st.image(cached_signed_url(storage_path), width=160)
+                        signed_url = initial_signed_urls.get(
+                            storage_path
+                        ) or cached_signed_url(storage_path)
+                        st.image(signed_url, width=160)
                     except Exception:
                         st.caption("(gagal muat gambar)")
             with cols[1]:
@@ -110,8 +137,10 @@ def render_followup_section(issue_code, current_user_email, wa_context=None, pho
             with cols[2]:
                 if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
                     backend.delete_followup(pid, storage_path)
-                    cached_followups.clear()
-                    cached_signed_url.clear()
+                    st.session_state[state_key] = [
+                        p for p in st.session_state[state_key] if p[0] != pid
+                    ]
+                    cached_followups_batch.clear()
                     st.success("Bukti follow-up dihapus.")
                     st.rerun(scope="fragment")
 
@@ -129,7 +158,8 @@ def render_followup_section(issue_code, current_user_email, wa_context=None, pho
                 uploaded_file.type,
             )
             backend.add_followup(issue_code, storage_path, "", "", current_user_email)
-            cached_followups.clear()
+            st.session_state[state_key] = backend.get_followups(issue_code)
+            cached_followups_batch.clear()
             st.success("Screenshot bukti follow-up tersimpan.")
             st.rerun(scope="fragment")
 
@@ -303,8 +333,10 @@ def render_ticket_list_page(
     if st.button("🔄 Refresh data", key=f"refresh_{key_prefix}"):
         cached_query.clear()
         cached_phone_map.clear()
-        cached_followups.clear()
+        cached_followups_batch.clear()
+        cached_signed_urls_batch.clear()
         cached_reporter_phones.clear()
+        clear_proof_state()
         st.rerun()
 
     selected_statuses = st.multiselect(
@@ -332,6 +364,15 @@ def render_ticket_list_page(
         phone_map = cached_phone_map()
         saved_phone_map = cached_reporter_phones()
 
+        all_issue_codes = tuple(
+            t[0] for tickets in grouped.values() for t in tickets
+        )
+        followups_by_code = cached_followups_batch(all_issue_codes)
+        all_storage_paths = tuple(
+            p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
+        )
+        signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
+
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
         for issue_code, title, status, issue_link, days, hours, minutes in tickets:
@@ -341,6 +382,8 @@ def render_ticket_list_page(
                 render_followup_section(
                     issue_code,
                     current_user_email,
+                    initial_proofs=followups_by_code.get(issue_code, []),
+                    initial_signed_urls=signed_urls_by_path,
                     wa_context={
                         "reporter": reporter,
                         "title": title,
@@ -398,8 +441,9 @@ def page_history(current_user_email):
     if st.button("🔄 Refresh data", key="refresh_history"):
         cached_history_codes.clear()
         cached_query.clear()
-        cached_followups.clear()
-        cached_signed_url.clear()
+        cached_followups_batch.clear()
+        cached_signed_urls_batch.clear()
+        clear_proof_state()
         st.rerun()
 
     with st.spinner("Memuat riwayat..."):
@@ -409,6 +453,12 @@ def page_history(current_user_email):
             return
         ticket_rows = cached_query(TICKET_LOOKUP_QUERY, {"codes": list(issue_codes)})
         ticket_info = {row[0]: row[1:] for row in ticket_rows}
+
+        followups_by_code = cached_followups_batch(tuple(issue_codes))
+        all_storage_paths = tuple(
+            p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
+        )
+        signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
 
     for issue_code in issue_codes:
         info = ticket_info.get(issue_code)
@@ -421,7 +471,12 @@ def page_history(current_user_email):
         with st.expander(label):
             if issue_link:
                 st.markdown(f"[Buka tiket]({issue_link})")
-            render_followup_section(issue_code, current_user_email)
+            render_followup_section(
+                issue_code,
+                current_user_email,
+                initial_proofs=followups_by_code.get(issue_code, []),
+                initial_signed_urls=signed_urls_by_path,
+            )
 
 
 def page_admin(admin_email):
