@@ -226,6 +226,18 @@ def get_followups(issue_code):
         conn.close()
 
 
+def delete_followup_record(followup_id):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM qadash_followup_proof WHERE id=%s", (followup_id,)
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # --- Storage (Supabase Storage REST API) ---
 
 
@@ -259,3 +271,16 @@ def get_signed_url(storage_path, expires_in=3600):
     resp.raise_for_status()
     signed = resp.json()["signedURL"]
     return f"{os.environ['SUPABASE_URL']}/storage/v1{signed}"
+
+
+def delete_screenshot(storage_path):
+    if not storage_path:
+        return
+    url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/{BUCKET}/{storage_path}"
+    resp = requests.delete(url, headers=_storage_headers(), timeout=15)
+    resp.raise_for_status()
+
+
+def delete_followup(followup_id, storage_path):
+    delete_screenshot(storage_path)
+    delete_followup_record(followup_id)

@@ -232,7 +232,7 @@ def page_stale(current_user_email):
                 if proofs:
                     st.caption("Bukti follow-up sebelumnya:")
                     for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
-                        cols = st.columns([1, 3])
+                        cols = st.columns([1, 3, 1])
                         with cols[0]:
                             if storage_path:
                                 try:
@@ -241,9 +241,16 @@ def page_stale(current_user_email):
                                     st.caption("(gagal muat gambar)")
                         with cols[1]:
                             st.write(f"Oleh: {uploaded_by}")
-                            st.write(f"Waktu: {created_at}")
+                            st.write(f"Waktu: {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
                             if wa_number:
                                 st.write(f"Nomor WA: {wa_number}")
+                        with cols[2]:
+                            if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
+                                backend.delete_followup(pid, storage_path)
+                                cached_followups.clear()
+                                cached_signed_url.clear()
+                                st.success("Bukti follow-up dihapus.")
+                                st.rerun()
 
                 uploaded_file = st.file_uploader(
                     "Upload screenshot bukti follow-up WA",
