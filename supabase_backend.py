@@ -1,0 +1,171 @@
+import json
+import os
+from datetime import datetime, timezone
+
+import psycopg2
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BUCKET = "wa-followup-proof"
+
+
+def get_pg_connection():
+    return psycopg2.connect(
+        host=os.environ["SUPAHOST"],
+        port=os.environ["SUPAPORT"],
+        dbname=os.environ["SUPADATABASE"],
+        user=os.environ["SUPAUSER"],
+        password=os.environ["SUPAPASSWORD"],
+        connect_timeout=10,
+    )
+
+
+def init_db():
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_activated_users (
+                    email TEXT PRIMARY KEY,
+                    name TEXT,
+                    activated BOOLEAN NOT NULL DEFAULT FALSE,
+                    activated_by TEXT,
+                    activated_at TIMESTAMPTZ
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_followup_proof (
+                    id SERIAL PRIMARY KEY,
+                    issue_code TEXT NOT NULL,
+                    storage_path TEXT,
+                    whatsapp_number TEXT,
+                    note TEXT,
+                    uploaded_by TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_activated(email):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT activated FROM qadash_activated_users WHERE email=%s", (email,)
+            )
+            row = cur.fetchone()
+            return bool(row and row[0])
+    finally:
+        conn.close()
+
+
+def set_activation(email, name, activated, admin_email):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_activated_users (email, name, activated, activated_by, activated_at)
+                VALUES (%s, %s, %s, %s, now())
+                ON CONFLICT (email) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    activated = EXCLUDED.activated,
+                    activated_by = EXCLUDED.activated_by,
+                    activated_at = EXCLUDED.activated_at
+                """,
+                (email, name, activated, admin_email),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_activations():
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT email, name, activated FROM qadash_activated_users ORDER BY name"
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def add_followup(issue_code, storage_path, whatsapp_number, note, uploaded_by):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_followup_proof
+                    (issue_code, storage_path, whatsapp_number, note, uploaded_by)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (issue_code, storage_path, whatsapp_number, note, uploaded_by),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_followups(issue_code):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, storage_path, whatsapp_number, note, uploaded_by, created_at
+                FROM qadash_followup_proof
+                WHERE issue_code=%s
+                ORDER BY created_at DESC
+                """,
+                (issue_code,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+# --- Storage (Supabase Storage REST API) ---
+
+
+def _storage_headers(content_type=None):
+    headers = {"Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_KEY']}"}
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def upload_screenshot(issue_code, filename, file_bytes, content_type):
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_name = filename.replace(" ", "_")
+    path = f"{issue_code}/{ts}_{safe_name}"
+    url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/{BUCKET}/{path}"
+    resp = requests.post(
+        url, headers=_storage_headers(content_type), data=bytes(file_bytes), timeout=30
+    )
+    resp.raise_for_status()
+    return path
+
+
+def get_signed_url(storage_path, expires_in=3600):
+    url = f"{os.environ['SUPABASE_URL']}/storage/v1/object/sign/{BUCKET}/{storage_path}"
+    resp = requests.post(
+        url,
+        headers=_storage_headers("application/json"),
+        data=json.dumps({"expiresIn": expires_in}),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    signed = resp.json()["signedURL"]
+    return f"{os.environ['SUPABASE_URL']}/storage/v1{signed}"
