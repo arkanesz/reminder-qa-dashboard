@@ -34,6 +34,11 @@ def cached_followups(issue_code):
     return backend.get_followups(issue_code)
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def cached_signed_url(storage_path):
+    return backend.get_signed_url(storage_path)
+
+
 def format_wa_number(raw):
     if not raw:
         return ""
@@ -224,7 +229,7 @@ def page_stale(current_user_email):
                         with cols[0]:
                             if storage_path:
                                 try:
-                                    st.image(backend.get_signed_url(storage_path), width=160)
+                                    st.image(cached_signed_url(storage_path), width=160)
                                 except Exception:
                                     st.caption("(gagal muat gambar)")
                         with cols[1]:
