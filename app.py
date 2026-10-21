@@ -1,5 +1,6 @@
 import re
 import urllib.parse
+from datetime import timedelta, timezone
 
 import streamlit as st
 from streamlit_cookies_controller import CookieController
@@ -13,6 +14,7 @@ import supabase_backend as backend
 
 SESSION_COOKIE = "qa_session_token"
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 hari
+JAKARTA_TZ = timezone(timedelta(hours=7))
 
 st.set_page_config(page_title="QA Dashboard", layout="wide")
 backend.init_db()
@@ -241,7 +243,8 @@ def page_stale(current_user_email):
                                     st.caption("(gagal muat gambar)")
                         with cols[1]:
                             st.write(f"Oleh: {uploaded_by}")
-                            st.write(f"Waktu: {created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                            waktu_wib = created_at.astimezone(JAKARTA_TZ)
+                            st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
                             if wa_number:
                                 st.write(f"Nomor WA: {wa_number}")
                         with cols[2]:
