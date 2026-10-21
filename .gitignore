@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 backfill_*.sql
 rollback_*.sql
+.claude/settings.local.json
