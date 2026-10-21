@@ -39,6 +39,11 @@ def cached_signed_url(storage_path):
     return backend.get_signed_url(storage_path)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_reporter_phones():
+    return backend.get_all_reporter_phones()
+
+
 def format_wa_number(raw):
     if not raw:
         return ""
@@ -191,6 +196,7 @@ def page_stale(current_user_email):
         cached_query.clear()
         cached_phone_map.clear()
         cached_followups.clear()
+        cached_reporter_phones.clear()
         st.rerun()
 
     selected_statuses = st.multiselect(
@@ -213,6 +219,7 @@ def page_stale(current_user_email):
             return
 
         phone_map = cached_phone_map()
+        saved_phone_map = cached_reporter_phones()
 
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
@@ -260,12 +267,17 @@ def page_stale(current_user_email):
 
                 st.markdown("---")
                 st.caption("Kirim pesan follow-up ke WhatsApp reporter")
-                default_phone = format_wa_number(phone_map.get(reporter, ""))
+                saved_phone = saved_phone_map.get(reporter)
+                default_phone = format_wa_number(
+                    saved_phone or phone_map.get(reporter, "")
+                )
                 wa_number = st.text_input(
                     "Nomor WhatsApp reporter",
                     value=default_phone,
                     key=f"wa_num_{issue_code}",
                 )
+                if saved_phone:
+                    st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
                 wa_message = st.text_area(
                     "Pesan",
                     value=build_wa_message(
@@ -275,8 +287,12 @@ def page_stale(current_user_email):
                     height=120,
                 )
                 if wa_number:
+                    formatted_number = format_wa_number(wa_number)
+                    if formatted_number and formatted_number != saved_phone:
+                        backend.save_reporter_phone(reporter, formatted_number)
+                        cached_reporter_phones.clear()
                     wa_link = (
-                        f"https://wa.me/{format_wa_number(wa_number)}"
+                        f"https://wa.me/{formatted_number}"
                         f"?text={urllib.parse.quote(wa_message)}"
                     )
                     st.link_button("Kirim WA ke Reporter", wa_link)

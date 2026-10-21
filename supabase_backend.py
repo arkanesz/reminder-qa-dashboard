@@ -61,6 +61,44 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_reporter_phone (
+                    reporter_name TEXT PRIMARY KEY,
+                    phone TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_all_reporter_phones():
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT reporter_name, phone FROM qadash_reporter_phone")
+            return dict(cur.fetchall())
+    finally:
+        conn.close()
+
+
+def save_reporter_phone(reporter_name, phone):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_reporter_phone (reporter_name, phone, updated_at)
+                VALUES (%s, %s, now())
+                ON CONFLICT (reporter_name) DO UPDATE SET
+                    phone = EXCLUDED.phone,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (reporter_name, phone),
+            )
         conn.commit()
     finally:
         conn.close()
