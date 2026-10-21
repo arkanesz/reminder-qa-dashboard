@@ -18,6 +18,22 @@ st.set_page_config(page_title="QA Dashboard", layout="wide")
 backend.init_db()
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def cached_query(query, params=None):
+    return common.run_query(query, params)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def cached_phone_map():
+    rows = common.run_query("SELECT name, phone FROM users WHERE phone IS NOT NULL")
+    return {name: phone for name, phone in rows if phone}
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def cached_followups(issue_code):
+    return backend.get_followups(issue_code)
+
+
 def format_wa_number(raw):
     if not raw:
         return ""
@@ -100,8 +116,11 @@ def login_form(cookies):
 
 def page_reminder():
     st.header("Reminder QA")
+    if st.button("🔄 Refresh data", key="refresh_reminder"):
+        cached_query.clear()
+        st.rerun()
     with st.spinner("Memuat data tiket..."):
-        rows = common.run_query(send_reminder.QUERY)
+        rows = cached_query(send_reminder.QUERY)
     if not rows:
         st.info("Tidak ada tiket Ready For QA / In QA / Pending QA / Checking saat ini.")
         return
@@ -126,8 +145,11 @@ def page_reminder():
 
 def page_report():
     st.header("Report Rekap Ready For QA")
+    if st.button("🔄 Refresh data", key="refresh_report"):
+        cached_query.clear()
+        st.rerun()
     with st.spinner("Memuat data tiket..."):
-        rows = common.run_query(generate_report.QUERY)
+        rows = cached_query(generate_report.QUERY)
     if not rows:
         st.info("Tidak ada tiket untuk direkap.")
         return
@@ -160,6 +182,12 @@ def page_report():
 def page_stale(current_user_email):
     st.header("Tiket Mangkrak (> 24 Jam)")
 
+    if st.button("🔄 Refresh data", key="refresh_stale"):
+        cached_query.clear()
+        cached_phone_map.clear()
+        cached_followups.clear()
+        st.rerun()
+
     selected_statuses = st.multiselect(
         "Filter status",
         check_stale_tickets.ALL_STALE_STATUSES,
@@ -170,7 +198,7 @@ def page_stale(current_user_email):
         return
 
     with st.spinner("Memuat data tiket..."):
-        rows = common.run_query(
+        rows = cached_query(
             check_stale_tickets.QUERY, {"statuses": tuple(selected_statuses)}
         )
         grouped = check_stale_tickets.group_stale(rows)
@@ -179,10 +207,7 @@ def page_stale(current_user_email):
             st.info("Tidak ada tiket yang mangkrak lebih dari 24 jam untuk status ini.")
             return
 
-        phone_rows = common.run_query(
-            "SELECT name, phone FROM users WHERE phone IS NOT NULL"
-        )
-        phone_map = {name: phone for name, phone in phone_rows if phone}
+        phone_map = cached_phone_map()
 
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
@@ -191,7 +216,7 @@ def page_stale(current_user_email):
             with st.expander(label):
                 st.markdown(f"[Buka tiket]({issue_link})")
 
-                proofs = backend.get_followups(issue_code)
+                proofs = cached_followups(issue_code)
                 if proofs:
                     st.caption("Bukti follow-up sebelumnya:")
                     for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
@@ -224,6 +249,7 @@ def page_stale(current_user_email):
                         backend.add_followup(
                             issue_code, storage_path, "", "", current_user_email
                         )
+                        cached_followups.clear()
                         st.success("Screenshot bukti follow-up tersimpan.")
                         st.rerun()
 
@@ -274,8 +300,9 @@ def page_admin(admin_email):
                 return
         if not results:
             st.info("Tidak ditemukan.")
+        activation_map = {e: a for e, _, a in backend.list_activations()}
         for uid, name, email in results:
-            activated = backend.is_activated(email)
+            activated = activation_map.get(email, False)
             col1, col2, col3 = st.columns([3, 3, 2])
             col1.write(name)
             col2.write(email)
