@@ -88,6 +88,7 @@ def build_wa_message(issue_code, title, status, days, hours, minutes, issue_link
     )
 
 
+@st.fragment
 def render_followup_section(issue_code, current_user_email, wa_context=None, phone_map=None, saved_phone_map=None):
     proofs = cached_followups(issue_code)
     if proofs:
@@ -112,7 +113,7 @@ def render_followup_section(issue_code, current_user_email, wa_context=None, pho
                     cached_followups.clear()
                     cached_signed_url.clear()
                     st.success("Bukti follow-up dihapus.")
-                    st.rerun()
+                    st.rerun(scope="fragment")
 
     uploaded_file = st.file_uploader(
         "Upload screenshot bukti follow-up WA",
@@ -130,7 +131,7 @@ def render_followup_section(issue_code, current_user_email, wa_context=None, pho
             backend.add_followup(issue_code, storage_path, "", "", current_user_email)
             cached_followups.clear()
             st.success("Screenshot bukti follow-up tersimpan.")
-            st.rerun()
+            st.rerun(scope="fragment")
 
     if not wa_context:
         return
