@@ -134,6 +134,8 @@ def render_followup_section(
                 st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
                 if wa_number:
                     st.write(f"Nomor WA: {wa_number}")
+                if note:
+                    st.write(f"Alasan: {note}")
             with cols[2]:
                 if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
                     backend.delete_followup(pid, storage_path)
@@ -149,6 +151,11 @@ def render_followup_section(
         type=["png", "jpg", "jpeg"],
         key=f"upload_{issue_code}",
     )
+    note_input = st.text_area(
+        "Alasan mangkrak/warning dari reporter (opsional)",
+        key=f"note_{issue_code}",
+        height=68,
+    )
     if uploaded_file is not None:
         if st.button("Simpan Screenshot", key=f"save_{issue_code}"):
             storage_path = backend.upload_screenshot(
@@ -157,7 +164,9 @@ def render_followup_section(
                 uploaded_file.getbuffer(),
                 uploaded_file.type,
             )
-            backend.add_followup(issue_code, storage_path, "", "", current_user_email)
+            backend.add_followup(
+                issue_code, storage_path, "", note_input.strip(), current_user_email
+            )
             st.session_state[state_key] = backend.get_followups(issue_code)
             cached_followups_batch.clear()
             st.success("Screenshot bukti follow-up tersimpan.")
