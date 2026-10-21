@@ -46,6 +46,24 @@ def cached_reporter_phones():
     return backend.get_all_reporter_phones()
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_history_codes():
+    return backend.get_issue_codes_with_followups()
+
+
+TICKET_LOOKUP_QUERY = """
+SELECT
+  p.key || '-' || i.key_num AS issue_code,
+  i.title,
+  wfstat.name AS status,
+  'https://tulip.prestisa.id/projects/' || p.id || '/issue/' || p.key || '-' || i.key_num AS issue_link
+FROM issues i
+LEFT JOIN projects p ON i.project_id = p.id
+LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
+WHERE (p.key || '-' || i.key_num) = ANY(%(codes)s)
+"""
+
+
 def format_wa_number(raw):
     if not raw:
         return ""
@@ -68,6 +86,91 @@ def build_wa_message(issue_code, title, status, days, hours, minutes, issue_link
         f"tolong kabari. Jika tidak ada kabar hingga jam kerja berakhir, "
         f"maka akan dieskalasi ke management. Terima kasih!"
     )
+
+
+def render_followup_section(issue_code, current_user_email, wa_context=None, phone_map=None, saved_phone_map=None):
+    proofs = cached_followups(issue_code)
+    if proofs:
+        st.caption("Bukti follow-up sebelumnya:")
+        for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
+            cols = st.columns([1, 3, 1])
+            with cols[0]:
+                if storage_path:
+                    try:
+                        st.image(cached_signed_url(storage_path), width=160)
+                    except Exception:
+                        st.caption("(gagal muat gambar)")
+            with cols[1]:
+                st.write(f"Oleh: {uploaded_by}")
+                waktu_wib = created_at.astimezone(JAKARTA_TZ)
+                st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
+                if wa_number:
+                    st.write(f"Nomor WA: {wa_number}")
+            with cols[2]:
+                if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
+                    backend.delete_followup(pid, storage_path)
+                    cached_followups.clear()
+                    cached_signed_url.clear()
+                    st.success("Bukti follow-up dihapus.")
+                    st.rerun()
+
+    uploaded_file = st.file_uploader(
+        "Upload screenshot bukti follow-up WA",
+        type=["png", "jpg", "jpeg"],
+        key=f"upload_{issue_code}",
+    )
+    if uploaded_file is not None:
+        if st.button("Simpan Screenshot", key=f"save_{issue_code}"):
+            storage_path = backend.upload_screenshot(
+                issue_code,
+                uploaded_file.name,
+                uploaded_file.getbuffer(),
+                uploaded_file.type,
+            )
+            backend.add_followup(issue_code, storage_path, "", "", current_user_email)
+            cached_followups.clear()
+            st.success("Screenshot bukti follow-up tersimpan.")
+            st.rerun()
+
+    if not wa_context:
+        return
+
+    reporter = wa_context["reporter"]
+    title = wa_context["title"]
+    status = wa_context["status"]
+    issue_link = wa_context["issue_link"]
+    days, hours, minutes = wa_context["days"], wa_context["hours"], wa_context["minutes"]
+    phone_map = phone_map or {}
+    saved_phone_map = saved_phone_map or {}
+
+    st.markdown("---")
+    st.caption("Kirim pesan follow-up ke WhatsApp reporter")
+    saved_phone = saved_phone_map.get(reporter)
+    default_phone = format_wa_number(saved_phone or phone_map.get(reporter, ""))
+    wa_number = st.text_input(
+        "Nomor WhatsApp reporter",
+        value=default_phone,
+        key=f"wa_num_{issue_code}",
+    )
+    if saved_phone:
+        st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
+    wa_message = st.text_area(
+        "Pesan",
+        value=build_wa_message(issue_code, title, status, days, hours, minutes, issue_link),
+        key=f"wa_msg_{issue_code}",
+        height=120,
+    )
+    if wa_number:
+        formatted_number = format_wa_number(wa_number)
+        if formatted_number and formatted_number != saved_phone:
+            backend.save_reporter_phone(reporter, formatted_number)
+            cached_reporter_phones.clear()
+        wa_link = (
+            f"https://wa.me/{formatted_number}?text={urllib.parse.quote(wa_message)}"
+        )
+        st.link_button("Kirim WA ke Reporter", wa_link)
+    else:
+        st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
 
 
 def show_lavender_connection_error(exc):
@@ -191,10 +294,12 @@ def page_report():
         st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
 
 
-def page_stale(current_user_email):
-    st.header("Tiket Mangkrak (> 24 Jam)")
+def render_ticket_list_page(
+    current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
+):
+    st.header(page_title)
 
-    if st.button("🔄 Refresh data", key="refresh_stale"):
+    if st.button("🔄 Refresh data", key=f"refresh_{key_prefix}"):
         cached_query.clear()
         cached_phone_map.clear()
         cached_followups.clear()
@@ -205,6 +310,7 @@ def page_stale(current_user_email):
         "Filter status",
         check_stale_tickets.ALL_STALE_STATUSES,
         default=check_stale_tickets.ALL_STALE_STATUSES,
+        key=f"statuses_{key_prefix}",
     )
     if not selected_statuses:
         st.warning("Pilih minimal 1 status.")
@@ -214,10 +320,12 @@ def page_stale(current_user_email):
         rows = cached_query(
             check_stale_tickets.QUERY, {"statuses": tuple(selected_statuses)}
         )
-        grouped = check_stale_tickets.group_stale(rows)
+        grouped = check_stale_tickets.group_by_elapsed(
+            rows, min_hours=min_hours, max_hours=max_hours
+        )
 
         if not grouped:
-            st.info("Tidak ada tiket yang mangkrak lebih dari 24 jam untuk status ini.")
+            st.info(empty_message)
             return
 
         phone_map = cached_phone_map()
@@ -229,92 +337,90 @@ def page_stale(current_user_email):
             label = f"[{issue_code}] {title} - {status} (H+{days}h {hours}j {minutes}m)"
             with st.expander(label):
                 st.markdown(f"[Buka tiket]({issue_link})")
-
-                proofs = cached_followups(issue_code)
-                if proofs:
-                    st.caption("Bukti follow-up sebelumnya:")
-                    for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
-                        cols = st.columns([1, 3, 1])
-                        with cols[0]:
-                            if storage_path:
-                                try:
-                                    st.image(cached_signed_url(storage_path), width=160)
-                                except Exception:
-                                    st.caption("(gagal muat gambar)")
-                        with cols[1]:
-                            st.write(f"Oleh: {uploaded_by}")
-                            waktu_wib = created_at.astimezone(JAKARTA_TZ)
-                            st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
-                            if wa_number:
-                                st.write(f"Nomor WA: {wa_number}")
-                        with cols[2]:
-                            if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
-                                backend.delete_followup(pid, storage_path)
-                                cached_followups.clear()
-                                cached_signed_url.clear()
-                                st.success("Bukti follow-up dihapus.")
-                                st.rerun()
-
-                uploaded_file = st.file_uploader(
-                    "Upload screenshot bukti follow-up WA",
-                    type=["png", "jpg", "jpeg"],
-                    key=f"upload_{issue_code}",
+                render_followup_section(
+                    issue_code,
+                    current_user_email,
+                    wa_context={
+                        "reporter": reporter,
+                        "title": title,
+                        "status": status,
+                        "issue_link": issue_link,
+                        "days": days,
+                        "hours": hours,
+                        "minutes": minutes,
+                    },
+                    phone_map=phone_map,
+                    saved_phone_map=saved_phone_map,
                 )
-                if uploaded_file is not None:
-                    if st.button("Simpan Screenshot", key=f"save_{issue_code}"):
-                        storage_path = backend.upload_screenshot(
-                            issue_code,
-                            uploaded_file.name,
-                            uploaded_file.getbuffer(),
-                            uploaded_file.type,
-                        )
-                        backend.add_followup(
-                            issue_code, storage_path, "", "", current_user_email
-                        )
-                        cached_followups.clear()
-                        st.success("Screenshot bukti follow-up tersimpan.")
-                        st.rerun()
-
-                st.markdown("---")
-                st.caption("Kirim pesan follow-up ke WhatsApp reporter")
-                saved_phone = saved_phone_map.get(reporter)
-                default_phone = format_wa_number(
-                    saved_phone or phone_map.get(reporter, "")
-                )
-                wa_number = st.text_input(
-                    "Nomor WhatsApp reporter",
-                    value=default_phone,
-                    key=f"wa_num_{issue_code}",
-                )
-                if saved_phone:
-                    st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
-                wa_message = st.text_area(
-                    "Pesan",
-                    value=build_wa_message(
-                        issue_code, title, status, days, hours, minutes, issue_link
-                    ),
-                    key=f"wa_msg_{issue_code}",
-                    height=120,
-                )
-                if wa_number:
-                    formatted_number = format_wa_number(wa_number)
-                    if formatted_number and formatted_number != saved_phone:
-                        backend.save_reporter_phone(reporter, formatted_number)
-                        cached_reporter_phones.clear()
-                    wa_link = (
-                        f"https://wa.me/{formatted_number}"
-                        f"?text={urllib.parse.quote(wa_message)}"
-                    )
-                    st.link_button("Kirim WA ke Reporter", wa_link)
-                else:
-                    st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
 
     st.divider()
-    if st.button("Kirim Ringkasan ke Telegram", key="btn_send_stale"):
-        message = check_stale_tickets.build_message(grouped, selected_statuses)
+    if st.button("Kirim Ringkasan ke Telegram", key=f"btn_send_{key_prefix}"):
+        message = check_stale_tickets.build_message(
+            grouped, selected_statuses, title=telegram_title
+        )
         common.send_telegram(message)
         total = sum(len(v) for v in grouped.values())
         st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
+
+
+def page_stale(current_user_email):
+    render_ticket_list_page(
+        current_user_email,
+        page_title="Tiket Mangkrak (> 24 Jam)",
+        min_hours=24,
+        max_hours=None,
+        key_prefix="stale",
+        telegram_title="Tiket Mangkrak > 24 Jam",
+        empty_message="Tidak ada tiket yang mangkrak lebih dari 24 jam untuk status ini.",
+    )
+
+
+def page_warning(current_user_email):
+    render_ticket_list_page(
+        current_user_email,
+        page_title="Tiket Warning (< 24 Jam)",
+        min_hours=0,
+        max_hours=24,
+        key_prefix="warning",
+        telegram_title="Tiket Warning < 24 Jam",
+        empty_message="Tidak ada tiket di bawah 24 jam untuk status ini.",
+    )
+
+
+def page_history(current_user_email):
+    st.header("Riwayat Follow-up")
+    st.caption(
+        "Semua tiket yang pernah ada bukti follow-up, termasuk yang statusnya "
+        "sudah berubah / tidak lagi mangkrak."
+    )
+
+    if st.button("🔄 Refresh data", key="refresh_history"):
+        cached_history_codes.clear()
+        cached_query.clear()
+        cached_followups.clear()
+        cached_signed_url.clear()
+        st.rerun()
+
+    with st.spinner("Memuat riwayat..."):
+        issue_codes = cached_history_codes()
+        if not issue_codes:
+            st.info("Belum ada riwayat follow-up.")
+            return
+        ticket_rows = cached_query(TICKET_LOOKUP_QUERY, {"codes": list(issue_codes)})
+        ticket_info = {row[0]: row[1:] for row in ticket_rows}
+
+    for issue_code in issue_codes:
+        info = ticket_info.get(issue_code)
+        if info:
+            title, status, issue_link = info
+            label = f"[{issue_code}] {title} — Status saat ini: {status}"
+        else:
+            issue_link = None
+            label = f"[{issue_code}] (tiket tidak ditemukan di Tulip, mungkin sudah dihapus)"
+        with st.expander(label):
+            if issue_link:
+                st.markdown(f"[Buka tiket]({issue_link})")
+            render_followup_section(issue_code, current_user_email)
 
 
 def page_admin(admin_email):
@@ -386,7 +492,13 @@ def main():
         st.session_state.user = None
         st.rerun()
 
-    menu_options = ["Reminder QA", "Report Rekap", "Tiket Mangkrak"]
+    menu_options = [
+        "Reminder QA",
+        "Report Rekap",
+        "Tiket Warning (< 24 Jam)",
+        "Tiket Mangkrak",
+        "Riwayat Follow-up",
+    ]
     if user["is_admin"]:
         menu_options.append("Admin - Aktivasi User")
 
@@ -396,8 +508,12 @@ def main():
         page_reminder()
     elif page == "Report Rekap":
         page_report()
+    elif page == "Tiket Warning (< 24 Jam)":
+        page_warning(user["email"])
     elif page == "Tiket Mangkrak":
         page_stale(user["email"])
+    elif page == "Riwayat Follow-up":
+        page_history(user["email"])
     elif page == "Admin - Aktivasi User":
         page_admin(user["email"])
 

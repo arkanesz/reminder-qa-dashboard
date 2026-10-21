@@ -47,11 +47,14 @@ def elapsed(changed_at):
     return days, hours, minutes
 
 
-def group_stale(rows):
+def group_by_elapsed(rows, min_hours=0, max_hours=None):
     by_reporter = defaultdict(list)
     for reporter, issue_code, title, status, issue_link, changed_at in rows:
         days, hours, minutes = elapsed(changed_at)
-        if days * 24 + hours < STALE_THRESHOLD_HOURS:
+        total_hours = days * 24 + hours
+        if total_hours < min_hours:
+            continue
+        if max_hours is not None and total_hours >= max_hours:
             continue
         reporter = reporter or "(Tanpa Reporter)"
         by_reporter[reporter].append((issue_code, title, status, issue_link, days, hours, minutes))
@@ -64,10 +67,14 @@ def group_stale(rows):
     )
 
 
-def build_message(grouped, statuses):
+def group_stale(rows):
+    return group_by_elapsed(rows, min_hours=STALE_THRESHOLD_HOURS)
+
+
+def build_message(grouped, statuses, title="Tiket Mangkrak > 24 Jam"):
     today = datetime.now().strftime("%d-%m-%Y %H:%M")
     status_label = " / ".join(statuses)
-    lines = [f"⚠️ Tiket Mangkrak > 24 Jam - {status_label} ({today})", ""]
+    lines = [f"⚠️ {title} - {status_label} ({today})", ""]
 
     for reporter, tickets in grouped.items():
         lines.append(f"\U0001F464 {reporter}")

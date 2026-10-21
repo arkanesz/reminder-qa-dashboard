@@ -226,6 +226,23 @@ def get_followups(issue_code):
         conn.close()
 
 
+def get_issue_codes_with_followups():
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT issue_code, MAX(created_at) AS latest
+                FROM qadash_followup_proof
+                GROUP BY issue_code
+                ORDER BY latest DESC
+                """
+            )
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def delete_followup_record(followup_id):
     conn = get_pg_connection()
     try:
