@@ -35,7 +35,10 @@ def build_wa_message(issue_code, title, status, days, hours, minutes, issue_link
         f"Status saat ini: {status}, sudah H+{days} hari {hours} jam {minutes} menit "
         f"belum ada perubahan status.\n"
         f"Link tiket: {issue_link}\n"
-        f"Mohon dibantu segera di-cek dan di-update progressnya ya. Terima kasih!"
+        f"Mohon dibantu segera di-cek dan di-update progressnya ya.\n"
+        f"Jika ada kendala karena tidak bisa testing (contoh: meeting atau halangan lainnya), "
+        f"tolong kabari. Jika tidak ada kabar hingga jam kerja berakhir, "
+        f"maka akan dieskalasi ke management. Terima kasih!"
     )
 
 
