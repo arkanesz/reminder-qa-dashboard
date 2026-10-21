@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 from datetime import datetime, timezone
 
 import psycopg2
@@ -50,6 +51,57 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_sessions (
+                    token TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    name TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def create_session(email, name):
+    token = secrets.token_urlsafe(32)
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO qadash_sessions (token, email, name) VALUES (%s, %s, %s)",
+                (token, email, name),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return token
+
+
+def get_session(token):
+    if not token:
+        return None
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT email, name FROM qadash_sessions WHERE token=%s", (token,)
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def delete_session(token):
+    if not token:
+        return
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM qadash_sessions WHERE token=%s", (token,))
         conn.commit()
     finally:
         conn.close()

@@ -4,3 +4,4 @@ requests
 streamlit
 pymysql
 bcrypt
+streamlit-cookies-controller

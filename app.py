@@ -2,6 +2,7 @@ import re
 import urllib.parse
 
 import streamlit as st
+from streamlit_cookies_controller import CookieController
 
 import common
 import check_stale_tickets
@@ -9,6 +10,9 @@ import generate_report
 import lavender_auth
 import send_reminder
 import supabase_backend as backend
+
+SESSION_COOKIE = "qa_session_token"
+SESSION_MAX_AGE = 7 * 24 * 3600  # 7 hari
 
 st.set_page_config(page_title="QA Dashboard", layout="wide")
 backend.init_db()
@@ -25,11 +29,12 @@ def format_wa_number(raw):
     return digits
 
 
-def build_wa_message(issue_code, title, status, days, hours, minutes):
+def build_wa_message(issue_code, title, status, days, hours, minutes, issue_link):
     return (
         f"Halo, mau follow up tiket [{issue_code}] {title}.\n"
         f"Status saat ini: {status}, sudah H+{days} hari {hours} jam {minutes} menit "
         f"belum ada perubahan status.\n"
+        f"Link tiket: {issue_link}\n"
         f"Mohon dibantu segera di-cek dan di-update progressnya ya. Terima kasih!"
     )
 
@@ -46,7 +51,7 @@ def show_lavender_connection_error(exc):
         st.warning("Gagal juga mendeteksi IP publik saat ini. Coba lagi beberapa saat.")
 
 
-def login_form():
+def login_form(cookies):
     st.title("Login - QA Dashboard")
     with st.form("login_form"):
         email = st.text_input("Email")
@@ -56,28 +61,32 @@ def login_form():
     if not submitted:
         return
 
-    try:
-        user = lavender_auth.find_user(email.strip())
-    except Exception as e:
-        show_lavender_connection_error(e)
-        return
+    with st.spinner("Memverifikasi akun..."):
+        try:
+            user = lavender_auth.find_user(email.strip())
+        except Exception as e:
+            show_lavender_connection_error(e)
+            return
 
-    if not user:
-        st.error("Email tidak ditemukan di Lavender.")
-        return
+        if not user:
+            st.error("Email tidak ditemukan di Lavender.")
+            return
 
-    _, name, user_email, hashed = user
-    if not lavender_auth.verify_password(password, hashed):
-        st.error("Password salah.")
-        return
+        _, name, user_email, hashed = user
+        if not lavender_auth.verify_password(password, hashed):
+            st.error("Password salah.")
+            return
 
-    if not (lavender_auth.is_admin(user_email) or backend.is_activated(user_email)):
-        st.warning(
-            "Login berhasil, tapi akun Anda belum diaktivasi untuk dashboard ini. "
-            "Hubungi Faris untuk aktivasi akses."
-        )
-        return
+        if not (lavender_auth.is_admin(user_email) or backend.is_activated(user_email)):
+            st.warning(
+                "Login berhasil, tapi akun Anda belum diaktivasi untuk dashboard ini. "
+                "Hubungi Faris untuk aktivasi akses."
+            )
+            return
 
+        token = backend.create_session(user_email, name)
+
+    cookies.set(SESSION_COOKIE, token, max_age=SESSION_MAX_AGE)
     st.session_state.user = {
         "email": user_email,
         "name": name,
@@ -88,7 +97,8 @@ def login_form():
 
 def page_reminder():
     st.header("Reminder QA")
-    rows = common.run_query(send_reminder.QUERY)
+    with st.spinner("Memuat data tiket..."):
+        rows = common.run_query(send_reminder.QUERY)
     if not rows:
         st.info("Tidak ada tiket Ready For QA / In QA / Pending QA / Checking saat ini.")
         return
@@ -113,7 +123,8 @@ def page_reminder():
 
 def page_report():
     st.header("Report Rekap Ready For QA")
-    rows = common.run_query(generate_report.QUERY)
+    with st.spinner("Memuat data tiket..."):
+        rows = common.run_query(generate_report.QUERY)
     if not rows:
         st.info("Tidak ada tiket untuk direkap.")
         return
@@ -155,17 +166,20 @@ def page_stale(current_user_email):
         st.warning("Pilih minimal 1 status.")
         return
 
-    rows = common.run_query(
-        check_stale_tickets.QUERY, {"statuses": tuple(selected_statuses)}
-    )
-    grouped = check_stale_tickets.group_stale(rows)
+    with st.spinner("Memuat data tiket..."):
+        rows = common.run_query(
+            check_stale_tickets.QUERY, {"statuses": tuple(selected_statuses)}
+        )
+        grouped = check_stale_tickets.group_stale(rows)
 
-    if not grouped:
-        st.info("Tidak ada tiket yang mangkrak lebih dari 24 jam untuk status ini.")
-        return
+        if not grouped:
+            st.info("Tidak ada tiket yang mangkrak lebih dari 24 jam untuk status ini.")
+            return
 
-    phone_rows = common.run_query("SELECT name, phone FROM users WHERE phone IS NOT NULL")
-    phone_map = {name: phone for name, phone in phone_rows if phone}
+        phone_rows = common.run_query(
+            "SELECT name, phone FROM users WHERE phone IS NOT NULL"
+        )
+        phone_map = {name: phone for name, phone in phone_rows if phone}
 
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
@@ -220,7 +234,9 @@ def page_stale(current_user_email):
                 )
                 wa_message = st.text_area(
                     "Pesan",
-                    value=build_wa_message(issue_code, title, status, days, hours, minutes),
+                    value=build_wa_message(
+                        issue_code, title, status, days, hours, minutes, issue_link
+                    ),
                     key=f"wa_msg_{issue_code}",
                     height=120,
                 )
@@ -247,11 +263,12 @@ def page_admin(admin_email):
 
     query = st.text_input("Cari user (nama/email)")
     if query:
-        try:
-            results = lavender_auth.search_users(query)
-        except Exception as e:
-            show_lavender_connection_error(e)
-            return
+        with st.spinner("Mencari user..."):
+            try:
+                results = lavender_auth.search_users(query)
+            except Exception as e:
+                show_lavender_connection_error(e)
+                return
         if not results:
             st.info("Tidak ditemukan.")
         for uid, name, email in results:
@@ -274,17 +291,37 @@ def page_admin(admin_email):
 
 
 def main():
+    cookies = CookieController()
+
     if "user" not in st.session_state:
         st.session_state.user = None
 
     if not st.session_state.user:
-        login_form()
+        token = cookies.get(SESSION_COOKIE)
+        if token:
+            with st.spinner("Memuat sesi..."):
+                session = backend.get_session(token)
+            if session:
+                email, name = session
+                if lavender_auth.is_admin(email) or backend.is_activated(email):
+                    st.session_state.user = {
+                        "email": email,
+                        "name": name,
+                        "is_admin": lavender_auth.is_admin(email),
+                    }
+
+    if not st.session_state.user:
+        login_form(cookies)
         return
 
     user = st.session_state.user
     st.sidebar.write(f"Login sebagai **{user['name']}**")
     st.sidebar.caption(user["email"])
     if st.sidebar.button("Logout"):
+        token = cookies.get(SESSION_COOKIE)
+        if token:
+            backend.delete_session(token)
+            cookies.remove(SESSION_COOKIE)
         st.session_state.user = None
         st.rerun()
 
