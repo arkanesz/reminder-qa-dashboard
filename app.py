@@ -270,15 +270,24 @@ def login_form(cookies):
 
 def page_reminder():
     st.header("Reminder QA")
-    if st.button("🔄 Refresh data", key="refresh_reminder"):
-        cached_query.clear()
-        st.rerun()
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(send_reminder.QUERY)
+    grouped = send_reminder.group_tickets(rows) if rows else {}
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh data", key="refresh_reminder"):
+            cached_query.clear()
+            st.rerun()
+    with col2:
+        if rows and st.button("Kirim ke Telegram", key="btn_send_reminder"):
+            message = send_reminder.build_message(grouped)
+            common.send_telegram(message)
+            st.success(f"Terkirim ke Telegram ({len(rows)} tiket, {len(grouped)} reporter).")
+
     if not rows:
         st.info("Tidak ada tiket Ready For QA / In QA / Pending QA / Checking saat ini.")
         return
-    grouped = send_reminder.group_tickets(rows)
 
     for reporter, statuses in grouped.items():
         with st.expander(f"{reporter}", expanded=True):
@@ -290,24 +299,28 @@ def page_reminder():
                 for project_key, key_num, issue_link in links:
                     st.markdown(f"- [{project_key}-{key_num}]({issue_link})")
 
-    st.divider()
-    if st.button("Kirim ke Telegram", key="btn_send_reminder"):
-        message = send_reminder.build_message(grouped)
-        common.send_telegram(message)
-        st.success(f"Terkirim ke Telegram ({len(rows)} tiket, {len(grouped)} reporter).")
-
 
 def page_report():
     st.header("Report Rekap Ready For QA")
-    if st.button("🔄 Refresh data", key="refresh_report"):
-        cached_query.clear()
-        st.rerun()
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(generate_report.QUERY)
+    grouped = generate_report.group_tickets(rows) if rows else {}
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh data", key="refresh_report"):
+            cached_query.clear()
+            st.rerun()
+    with col2:
+        if rows and st.button("Kirim ke Telegram", key="btn_send_report"):
+            message = generate_report.build_message(grouped)
+            common.send_telegram(message)
+            total = sum(len(v) for v in grouped.values())
+            st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
+
     if not rows:
         st.info("Tidak ada tiket untuk direkap.")
         return
-    grouped = generate_report.group_tickets(rows)
 
     for reporter, tickets in grouped.items():
         subtask_sum = sum(t[2] for t in tickets if t[2])
@@ -325,27 +338,11 @@ def page_report():
                 label = f"{total_subtasks} Subtask" if total_subtasks else "1 Tiket Utama"
                 st.markdown(f"- [{issue_code}] {title} ({label}) - {status}")
 
-    st.divider()
-    if st.button("Kirim ke Telegram", key="btn_send_report"):
-        message = generate_report.build_message(grouped)
-        common.send_telegram(message)
-        total = sum(len(v) for v in grouped.values())
-        st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
-
 
 def render_ticket_list_page(
     current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
 ):
     st.header(page_title)
-
-    if st.button("🔄 Refresh data", key=f"refresh_{key_prefix}"):
-        cached_query.clear()
-        cached_phone_map.clear()
-        cached_followups_batch.clear()
-        cached_signed_urls_batch.clear()
-        cached_reporter_phones.clear()
-        clear_proof_state()
-        st.rerun()
 
     selected_statuses = st.multiselect(
         "Filter status",
@@ -365,21 +362,44 @@ def render_ticket_list_page(
             rows, min_hours=min_hours, max_hours=max_hours
         )
 
-        if not grouped:
-            st.info(empty_message)
-            return
+        phone_map = {}
+        saved_phone_map = {}
+        followups_by_code = {}
+        signed_urls_by_path = {}
+        if grouped:
+            phone_map = cached_phone_map()
+            saved_phone_map = cached_reporter_phones()
+            all_issue_codes = tuple(
+                t[0] for tickets in grouped.values() for t in tickets
+            )
+            followups_by_code = cached_followups_batch(all_issue_codes)
+            all_storage_paths = tuple(
+                p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
+            )
+            signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
 
-        phone_map = cached_phone_map()
-        saved_phone_map = cached_reporter_phones()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh data", key=f"refresh_{key_prefix}"):
+            cached_query.clear()
+            cached_phone_map.clear()
+            cached_followups_batch.clear()
+            cached_signed_urls_batch.clear()
+            cached_reporter_phones.clear()
+            clear_proof_state()
+            st.rerun()
+    with col2:
+        if grouped and st.button("Kirim Ringkasan ke Telegram", key=f"btn_send_{key_prefix}"):
+            message = check_stale_tickets.build_message(
+                grouped, selected_statuses, title=telegram_title
+            )
+            common.send_telegram(message)
+            total = sum(len(v) for v in grouped.values())
+            st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
 
-        all_issue_codes = tuple(
-            t[0] for tickets in grouped.values() for t in tickets
-        )
-        followups_by_code = cached_followups_batch(all_issue_codes)
-        all_storage_paths = tuple(
-            p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
-        )
-        signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
+    if not grouped:
+        st.info(empty_message)
+        return
 
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
@@ -404,15 +424,6 @@ def render_ticket_list_page(
                     phone_map=phone_map,
                     saved_phone_map=saved_phone_map,
                 )
-
-    st.divider()
-    if st.button("Kirim Ringkasan ke Telegram", key=f"btn_send_{key_prefix}"):
-        message = check_stale_tickets.build_message(
-            grouped, selected_statuses, title=telegram_title
-        )
-        common.send_telegram(message)
-        total = sum(len(v) for v in grouped.values())
-        st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
 
 
 def page_stale(current_user_email):
