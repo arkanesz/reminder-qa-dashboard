@@ -1,0 +1,75 @@
+SELECT
+  p.key || '-' || i.key_num AS issue_code,
+  p.key || '-' || parent.key_num AS parent_issue_code,
+  (
+    SELECT NULLIF(COUNT(sub.id), 0)
+    FROM issues sub
+    WHERE sub.parent_issue_id = i.id
+  ) AS total_subtasks,
+  i.title,
+  CASE i.priority
+    WHEN 'P0' THEN 'Critical'
+    WHEN 'P1' THEN 'High'
+    WHEN 'P2' THEN 'Medium'
+    WHEN 'P3' THEN 'Low'
+    WHEN 'P4' THEN 'Lowest'
+    ELSE i.priority
+  END AS priority,
+  i.start_date,
+  i.end_date,
+  i.created_at,
+  p.name AS nama_project,
+  us.name AS assignee,
+  us1.name AS reporter,
+  spn.name AS sprint_name,
+  wfstat.name AS status,
+  itp.name AS issue_types,
+  'https://tulip.prestisa.id/projects/' || p.id || '/issue/' || p.key || '-' || i.key_num AS issue_link,
+  
+  (
+    SELECT u_comment.name
+    FROM comments c
+    LEFT JOIN users u_comment ON u_comment.id = c.author_id
+    WHERE c.issue_id = i.id
+    ORDER BY c.created_at DESC
+    LIMIT 1
+  ) AS last_commenter,
+
+  (
+    SELECT array_to_string(ARRAY(
+      SELECT jsonb_array_elements_text(icf.value)
+    ), ', ')
+    FROM issue_custom_fields icf
+    JOIN custom_field_defs cfd ON cfd.id = icf.field_id
+    WHERE icf.issue_id = i.id
+      AND cfd.field_type = 'multi_select'
+    LIMIT 1
+  ) AS custom_field_1,
+
+
+  (
+    SELECT u_cf.name
+    FROM issue_custom_fields icf
+    JOIN custom_field_defs cfd ON cfd.id = icf.field_id
+    LEFT JOIN users u_cf ON u_cf.id::text = (icf.value #>> '{}')
+    WHERE icf.issue_id = i.id
+      AND cfd.field_type = 'user'
+    LIMIT 1
+  ) AS custom_field_2
+
+FROM
+  issues i
+  LEFT JOIN issues parent ON parent.id = i.parent_issue_id
+  LEFT JOIN projects p ON i.project_id = p.id
+  LEFT JOIN users us ON us.id = i.assignee_id
+  LEFT JOIN users us1 ON us1.id = i.reporter_id
+  LEFT JOIN sprints spn ON spn.id = i.sprint_id
+  LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
+  LEFT JOIN issue_types itp ON itp.id = i.type_id
+WHERE 
+wfstat.name IN ('Ready For QA', 'In QA', 'Pending QA', 'Checking')
+
+and   (itp.name != 'Sub-task' OR itp.name IS NULL)
+  and p.key || '-' || parent.key_num is null
+
+ORDER BY us1.name DESC;

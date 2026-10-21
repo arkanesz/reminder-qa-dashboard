@@ -1,0 +1,71 @@
+Selamat Siang!
+
+Berikut daftar tiket terbaru untuk setiap PIC beserta statusnya:
+
+@Muh'amat Arifin 
+[Ready For QA]
+https://tulip.prestisa.id/projects/75fcb59a-c9da-4fbe-87f1-e2bbfe9c6d52/issue/BTACKING-76
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-255
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-746
+
+[Pending QA]
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-834
+
+@Dhita Tovani 
+[Ready For QA]
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-4
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-5
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-6
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-7
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-12
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-13
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-14
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-16
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-17
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-332
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-621
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-622
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-653
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-654
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-696
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-700
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-1021
+
+[Pending QA]
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-18
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-98
+
+@Jennifer Priscilla 
+[Ready For QA]
+https://tulip.prestisa.id/projects/75fcb59a-c9da-4fbe-87f1-e2bbfe9c6d52/issue/BTACKING-113
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-60
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-722
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-813
+
+[Pending QA]
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-451
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-472
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-701
+
+@Muza 
+[Ready For QA]
+https://tulip.prestisa.id/projects/75fcb59a-c9da-4fbe-87f1-e2bbfe9c6d52/issue/BTACKING-137
+
+@Octavia 
+[Ready For QA]
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-988
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-1043
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-493
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-532
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-606
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-783
+
+[Pending QA]
+https://tulip.prestisa.id/projects/8df7a860-9f4b-42ab-ba63-a2421e5e35a1/issue/DEV-1067
+https://tulip.prestisa.id/projects/fd4a0bf4-d21e-4464-8b0c-f5246370f74b/issue/MTN-201
+
+@Wahyu Prakoso 
+[Ready For QA]
+https://tulip.prestisa.id/projects/75fcb59a-c9da-4fbe-87f1-e2bbfe9c6d52/issue/BTACKING-91
+
+Segera di test dan komen ya, setelah itu jangan lupa komentar dan ubah statusnya sesuai hasil testing nya.. Thank you!

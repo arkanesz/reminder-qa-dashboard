@@ -1,0 +1,49 @@
+Rekap Data Tiket (9 September 2026) 📊
+
+👤 Arifin (Total: 25 Subtask)
+▪️ [BTACKING-76] Order Piutang yang Lolos Kriteria Tapi Jatuh ke Approval Manual (8 Subtask) - Ready For QA
+▪️ [DEV-834] migrasi xendit ke sepulsa untuk withdraw poin EP (7 Subtask) - Pending QA
+▪️ [DEV-746] ubah format string to number di nominal order problem dan po problem (1 Subtask) - Ready For QA
+▪️ [DEV-255] Virtual Account di PR Finance dirubah menggunakan sistem payout di xendit (9 Subtask) - Ready For QA
+
+👤 Dhita (Total: 154 Subtask, 1 Tiket Utama)
+▪️ [DEV-332] Employee Database - POV Atasan Langsung Menerima Pengajuan Resign (1 Tiket Utama) - Ready For QA
+▪️ [DEV-16] Modul 2 - Employee Database - Employee Exit PART 7 - POV Karyawan (Exit Interview) (6 Subtask) - Ready For QA
+▪️ [DEV-621] Document Creation BAB 1 - Overview & Business Objective (10 Subtask) - Ready For QA
+▪️ [DEV-622] Document Creation BAB 2 - Master Data (19 Subtask) - Ready For QA
+▪️ [DEV-654] Document Creation BAB 4 - Approval, Publish & Document Issuance (17 Subtask) - Ready For QA
+▪️ [DEV-17] Modul 2 - Employee Database - Document Creation POV HR (8 Subtask) - Ready For QA
+▪️ [DEV-653] Document Creation BAB 3 - Generate Document (19 Subtask) - Ready For QA
+▪️ [DEV-696] Document Creation BAB 5 - Document Management (20 Subtask) - Ready For QA
+▪️ [DEV-12] Modul 2 - Employee Database - Employee Exit PART 3 - POV Admin HR Proses Manual (7 Subtask) - Ready For QA
+▪️ [DEV-700] Document Creation BAB 6 - Permission & Access Control (13 Subtask) - Ready For QA
+▪️ [DEV-98] Modul 2 Employee Database - Connecting email Prestisa di seluruh internal sistem (9 Subtask) - Pending QA
+▪️ [DEV-5] Modul 2 - Employee Database - Karir - POV Admin HR (2 Subtask) - Ready For QA
+▪️ [DEV-6] Modul 2 - Employee Database - Karir - POV User/Atasan Langsung (1 Subtask) - Ready For QA
+▪️ [DEV-4] Modul 2 - Employee Database - Indisipliner POV HR Manager atau COO (1 Subtask) - Ready For QA
+▪️ [DEV-14] Modul 2 - Employee Database - Employee Exit PART 5 - POV User Departemen Lain yang Terkait (6 Subtask) - Ready For QA
+▪️ [DEV-13] Modul 2 - Employee Database - Employee Exit PART 4 - POV Admin HR Proses Otomatis (7 Subtask) - Ready For QA
+▪️ [DEV-1021] Modul 2 - Employee Database - Database Karyawan Aktif PART 2 - DATA KEPEGAWAIAN (PERPANJANGAN PERJANJIAN KERJASAMA) POV Karyawan atau Mitra Kerja (1 Subtask) - Ready For QA
+▪️ [DEV-18] Modul 2 - Employee Database - Document Creation POV Approver (7 Subtask) - Pending QA
+▪️ [DEV-7] Modul 2 - Employee Database - Karir - POV HR Manager (1 Subtask) - Ready For QA
+
+👤 Jeje_bd (Total: 46 Subtask)
+▪️ [MTN-472] rules auto blast (9 Subtask) - Pending QA
+▪️ [BTACKING-113] Blast otomatis ke mitra belum sesuai kapasitas pengiriman order & tidak ada mitra cadangan saat kosong (1 Subtask) - Ready For QA
+▪️ [MTN-813] Sambungkan Notifikasi Foto Lokasi dengan Halaman Review Pesanan (2 Subtask) - Ready For QA
+▪️ [MTN-451] Pengaktifkan kembali pengiriman bluebird (1 Subtask) - Pending QA
+▪️ [DEV-60] Maintenance Supply Chain - Dashboard Monitoring Turun Data - Bug Turun Data (9 Subtask) - Ready For QA
+▪️ [MTN-722] Penyempurnaan Alur Penyelesaian Tiket & Monitoring Isu Komplain Customer Service (Lotus) (22 Subtask) - Ready For QA
+▪️ [MTN-701] List Mitra di Purchase Request (2 Subtask) - Pending QA
+
+👤 Muzayyanah (Total: 1 Subtask)
+▪️ [BTACKING-137] Master Report: Data Total Ads Google Tidak Ter-update Secara Wajar (Jeda Berjam-jam) (1 Subtask) - Ready For QA
+
+👤 Octa (Total: 23 Subtask)
+▪️ [MTN-493] Bug Saldo Poin Reward Customer Tidak Konsisten (8 Subtask) - Ready For QA
+▪️ [DEV-988] Perpanjang Jendela Waktu Perpindahan Chat Pemesanan Kedua ke Telemarketing (Lotus) (3 Subtask) - Ready For QA
+▪️ [MTN-532] Perbaiki data npwp (7 Subtask) - Ready For QA
+▪️ [DEV-1067] Express Order Fee pada Link Order Prestisa (5 Subtask) - Pending QA
+
+👤 Sisca (Total: 4 Subtask)
+▪️ [BTACKING-54] Status Pembayaran PR Finance (DSP UBB) Tidak Ikut Berubah Meski Sudah Sukses Dibayar, Jurnal Juga Tidak Ter-generate (4 Subtask) - Ready For QA

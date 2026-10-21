@@ -1,0 +1,8 @@
+.env
+credentials.txt
+dashboard_data.db
+uploads/
+__pycache__/
+*.pyc
+backfill_*.sql
+rollback_*.sql
