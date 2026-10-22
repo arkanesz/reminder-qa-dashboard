@@ -1,6 +1,6 @@
 import re
 import urllib.parse
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 from streamlit_cookies_controller import CookieController
@@ -56,6 +56,11 @@ def cached_signed_urls_batch(storage_paths):
     return backend.get_signed_urls_batch(storage_paths)
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def cached_wa_log_batch(issue_codes):
+    return backend.get_wa_log_batch(issue_codes)
+
+
 TICKET_LOOKUP_QUERY = """
 SELECT
   p.key || '-' || i.key_num AS issue_code,
@@ -105,6 +110,7 @@ def render_followup_section(
     current_user_email,
     initial_proofs=(),
     initial_signed_urls=None,
+    initial_wa_log=(),
     wa_context=None,
     phone_map=None,
     saved_phone_map=None,
@@ -172,6 +178,20 @@ def render_followup_section(
             st.success("Screenshot bukti follow-up tersimpan.")
             st.rerun(scope="fragment")
 
+    wa_log_state_key = f"wa_log_state_{issue_code}"
+    if wa_log_state_key not in st.session_state:
+        st.session_state[wa_log_state_key] = list(initial_wa_log)
+    wa_log = st.session_state[wa_log_state_key]
+
+    if wa_log:
+        st.caption("Riwayat kirim WA ke reporter:")
+        for reporter_log, phone_log, message_log, sent_by, sent_at in wa_log:
+            sent_at_wib = sent_at.astimezone(JAKARTA_TZ)
+            st.write(
+                f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
+                f"{sent_by} kirim ke {reporter_log} ({phone_log})"
+            )
+
     if not wa_context:
         return
 
@@ -213,7 +233,20 @@ def render_followup_section(
         wa_link = (
             f"https://wa.me/{formatted_number}?text={urllib.parse.quote(wa_message)}"
         )
-        st.link_button("Kirim WA ke Reporter", wa_link)
+        col_send, col_mark = st.columns(2)
+        with col_send:
+            st.link_button("Kirim WA ke Reporter", wa_link)
+        with col_mark:
+            if st.button("✅ Tandai sudah dikirim", key=f"mark_sent_{issue_code}"):
+                backend.log_wa_sent(
+                    issue_code, reporter, formatted_number, wa_message, current_user_email
+                )
+                st.session_state[wa_log_state_key].append(
+                    (reporter, formatted_number, wa_message, current_user_email, datetime.now(timezone.utc))
+                )
+                cached_wa_log_batch.clear()
+                st.success("Dicatat di riwayat kirim WA.")
+                st.rerun(scope="fragment")
     else:
         st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
 
@@ -375,6 +408,7 @@ def render_ticket_list_page(
         saved_phone_map = {}
         followups_by_code = {}
         signed_urls_by_path = {}
+        wa_log_by_code = {}
         if grouped:
             phone_map = cached_phone_map()
             saved_phone_map = cached_reporter_phones()
@@ -386,6 +420,7 @@ def render_ticket_list_page(
                 p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
             )
             signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
+            wa_log_by_code = cached_wa_log_batch(all_issue_codes)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -395,6 +430,7 @@ def render_ticket_list_page(
             cached_followups_batch.clear()
             cached_signed_urls_batch.clear()
             cached_reporter_phones.clear()
+            cached_wa_log_batch.clear()
             clear_proof_state()
             st.rerun()
     with col2:
@@ -421,6 +457,7 @@ def render_ticket_list_page(
                     current_user_email,
                     initial_proofs=followups_by_code.get(issue_code, []),
                     initial_signed_urls=signed_urls_by_path,
+                    initial_wa_log=wa_log_by_code.get(issue_code, []),
                     wa_context={
                         "reporter": reporter,
                         "title": title,
@@ -471,6 +508,7 @@ def page_history(current_user_email):
         cached_query.clear()
         cached_followups_batch.clear()
         cached_signed_urls_batch.clear()
+        cached_wa_log_batch.clear()
         clear_proof_state()
         st.rerun()
 
@@ -487,6 +525,7 @@ def page_history(current_user_email):
             p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
         )
         signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
+        wa_log_by_code = cached_wa_log_batch(tuple(issue_codes))
 
     for issue_code in issue_codes:
         info = ticket_info.get(issue_code)
@@ -504,6 +543,7 @@ def page_history(current_user_email):
                 current_user_email,
                 initial_proofs=followups_by_code.get(issue_code, []),
                 initial_signed_urls=signed_urls_by_path,
+                initial_wa_log=wa_log_by_code.get(issue_code, []),
             )
 
 

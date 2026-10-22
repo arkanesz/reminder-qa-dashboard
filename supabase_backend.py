@@ -70,9 +70,66 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_wa_log (
+                    id SERIAL PRIMARY KEY,
+                    issue_code TEXT NOT NULL,
+                    reporter TEXT,
+                    phone TEXT,
+                    message TEXT,
+                    sent_by TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
         conn.commit()
     finally:
         conn.close()
+
+
+def log_wa_sent(issue_code, reporter, phone, message, sent_by):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_wa_log (issue_code, reporter, phone, message, sent_by)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (issue_code, reporter, phone, message, sent_by),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_wa_log_batch(issue_codes):
+    issue_codes = list(issue_codes)
+    if not issue_codes:
+        return {}
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT issue_code, reporter, phone, message, sent_by, created_at
+                FROM qadash_wa_log
+                WHERE issue_code = ANY(%s)
+                ORDER BY created_at DESC
+                """,
+                (issue_codes,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    result = {}
+    for issue_code, reporter, phone, message, sent_by, created_at in rows:
+        result.setdefault(issue_code, []).append(
+            (reporter, phone, message, sent_by, created_at)
+        )
+    return result
 
 
 def get_all_reporter_phones():
@@ -260,8 +317,11 @@ def get_issue_codes_with_followups():
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT issue_code, MAX(created_at) AS latest
-                FROM qadash_followup_proof
+                SELECT issue_code, MAX(created_at) AS latest FROM (
+                    SELECT issue_code, created_at FROM qadash_followup_proof
+                    UNION ALL
+                    SELECT issue_code, created_at FROM qadash_wa_log
+                ) combined
                 GROUP BY issue_code
                 ORDER BY latest DESC
                 """
