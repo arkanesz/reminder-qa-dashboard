@@ -1,6 +1,6 @@
 import re
 import urllib.parse
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 
 import streamlit as st
 from streamlit_cookies_controller import CookieController
@@ -149,7 +149,7 @@ def render_followup_section(
                         p for p in st.session_state[state_key] if p[0] != pid
                     ]
                     cached_followups_batch.clear()
-                    st.success("Bukti follow-up dihapus.")
+                    st.toast("Bukti follow-up dihapus.", icon="✅")
                     st.rerun(scope="fragment")
 
     uploaded_file = st.file_uploader(
@@ -175,7 +175,7 @@ def render_followup_section(
             )
             st.session_state[state_key] = backend.get_followups(issue_code)
             cached_followups_batch.clear()
-            st.success("Screenshot bukti follow-up tersimpan.")
+            st.toast("Screenshot bukti follow-up tersimpan.", icon="✅")
             st.rerun(scope="fragment")
 
     wa_log_state_key = f"wa_log_state_{issue_code}"
@@ -185,12 +185,23 @@ def render_followup_section(
 
     if wa_log:
         st.caption("Riwayat kirim WA ke reporter:")
-        for reporter_log, phone_log, message_log, sent_by, sent_at in wa_log:
+        for log_id, reporter_log, phone_log, message_log, sent_by, sent_at in wa_log:
             sent_at_wib = sent_at.astimezone(JAKARTA_TZ)
-            st.write(
-                f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
-                f"{sent_by} kirim ke {reporter_log} ({phone_log})"
-            )
+            log_col1, log_col2 = st.columns([5, 1])
+            with log_col1:
+                st.write(
+                    f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
+                    f"{sent_by} kirim ke {reporter_log} ({phone_log})"
+                )
+            with log_col2:
+                if st.button("🗑️", key=f"delete_walog_{log_id}"):
+                    backend.delete_wa_log(log_id)
+                    st.session_state[wa_log_state_key] = [
+                        w for w in st.session_state[wa_log_state_key] if w[0] != log_id
+                    ]
+                    cached_wa_log_batch.clear()
+                    st.toast("Riwayat kirim WA dihapus.", icon="✅")
+                    st.rerun(scope="fragment")
 
     if not wa_context:
         return
@@ -238,14 +249,16 @@ def render_followup_section(
             st.link_button("Kirim WA ke Reporter", wa_link)
         with col_mark:
             if st.button("✅ Tandai sudah dikirim", key=f"mark_sent_{issue_code}"):
-                backend.log_wa_sent(
+                new_id, sent_at = backend.log_wa_sent(
                     issue_code, reporter, formatted_number, wa_message, current_user_email
                 )
-                st.session_state[wa_log_state_key].append(
-                    (reporter, formatted_number, wa_message, current_user_email, datetime.now(timezone.utc))
-                )
+                existing_ids = {w[0] for w in st.session_state[wa_log_state_key]}
+                if new_id not in existing_ids:
+                    st.session_state[wa_log_state_key].append(
+                        (new_id, reporter, formatted_number, wa_message, current_user_email, sent_at)
+                    )
                 cached_wa_log_batch.clear()
-                st.success("Dicatat di riwayat kirim WA.")
+                st.toast("Dicatat di riwayat kirim WA.", icon="✅")
                 st.rerun(scope="fragment")
     else:
         st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")

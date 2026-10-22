@@ -92,13 +92,43 @@ def log_wa_sent(issue_code, reporter, phone, message, sent_by):
     conn = get_pg_connection()
     try:
         with conn.cursor() as cur:
+            # Guard against duplicate inserts from rapid repeated clicks: reuse the
+            # existing row if the same person logged the same send within 10 seconds.
+            cur.execute(
+                """
+                SELECT id, created_at FROM qadash_wa_log
+                WHERE issue_code=%s AND reporter=%s AND phone=%s AND sent_by=%s
+                  AND created_at > now() - interval '10 seconds'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (issue_code, reporter, phone, sent_by),
+            )
+            existing = cur.fetchone()
+            if existing:
+                conn.commit()
+                return existing
+
             cur.execute(
                 """
                 INSERT INTO qadash_wa_log (issue_code, reporter, phone, message, sent_by)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, created_at
                 """,
                 (issue_code, reporter, phone, message, sent_by),
             )
+            new_id, created_at = cur.fetchone()
+        conn.commit()
+        return new_id, created_at
+    finally:
+        conn.close()
+
+
+def delete_wa_log(log_id):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM qadash_wa_log WHERE id=%s", (log_id,))
         conn.commit()
     finally:
         conn.close()
@@ -113,7 +143,7 @@ def get_wa_log_batch(issue_codes):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT issue_code, reporter, phone, message, sent_by, created_at
+                SELECT id, issue_code, reporter, phone, message, sent_by, created_at
                 FROM qadash_wa_log
                 WHERE issue_code = ANY(%s)
                 ORDER BY created_at DESC
@@ -125,9 +155,9 @@ def get_wa_log_batch(issue_codes):
         conn.close()
 
     result = {}
-    for issue_code, reporter, phone, message, sent_by, created_at in rows:
+    for log_id, issue_code, reporter, phone, message, sent_by, created_at in rows:
         result.setdefault(issue_code, []).append(
-            (reporter, phone, message, sent_by, created_at)
+            (log_id, reporter, phone, message, sent_by, created_at)
         )
     return result
 
