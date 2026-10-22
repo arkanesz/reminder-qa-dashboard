@@ -93,7 +93,52 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_auto_send_log (
+                    id SERIAL PRIMARY KEY,
+                    send_type TEXT NOT NULL,
+                    ticket_count INTEGER,
+                    status TEXT NOT NULL,
+                    sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def log_auto_send(send_type, ticket_count, status):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_auto_send_log (send_type, ticket_count, status)
+                VALUES (%s, %s, %s)
+                """,
+                (send_type, ticket_count, status),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_auto_send_log(limit=20):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT send_type, ticket_count, status, sent_at
+                FROM qadash_auto_send_log
+                ORDER BY sent_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return cur.fetchall()
     finally:
         conn.close()
 

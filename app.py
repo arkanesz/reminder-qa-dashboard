@@ -672,12 +672,32 @@ def page_settings(admin_email):
     last_reminder = settings.get("reminder_last_sent_date")
     last_report = settings.get("report_last_sent_date")
     if last_reminder or last_report:
-        st.divider()
-        st.caption("Terakhir dikirim otomatis:")
+        st.caption("Tanggal terakhir ditandai terkirim:")
         if last_reminder:
             st.write(f"- Reminder QA: {last_reminder}")
         if last_report:
             st.write(f"- Report Rekap: {last_report}")
+
+    st.divider()
+    st.subheader("Riwayat Auto-Send")
+    st.caption("Catatan tiap kali GitHub Actions mengecek & mengeksekusi jadwal ini.")
+    if st.button("🔄 Refresh riwayat", key="refresh_auto_send_log"):
+        st.rerun()
+
+    log_rows = backend.get_auto_send_log(limit=30)
+    if not log_rows:
+        st.info("Belum ada riwayat auto-send.")
+    else:
+        label_map = {"reminder": "Reminder QA", "report": "Report Rekap"}
+        status_icon = {"sent": "✅ Terkirim", "skipped_no_tickets": "⏭️ Skip (tidak ada tiket)"}
+        for send_type, ticket_count, status, sent_at in log_rows:
+            sent_at_wib = sent_at.astimezone(JAKARTA_TZ)
+            status_label = status_icon.get(status, f"❌ {status}")
+            count_label = f" — {ticket_count} tiket" if ticket_count else ""
+            st.write(
+                f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
+                f"{label_map.get(send_type, send_type)}: {status_label}{count_label}"
+            )
 
 
 def main():

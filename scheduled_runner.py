@@ -24,25 +24,39 @@ def should_run(settings, enabled_key, time_key, last_sent_key, now_wib, today_st
 
 
 def run_reminder():
-    rows = run_query(send_reminder.QUERY)
-    if not rows:
-        print("Reminder QA: tidak ada tiket, skip kirim.")
-        return
-    grouped = send_reminder.group_tickets(rows)
-    message = send_reminder.build_message(grouped)
-    send_telegram(message)
-    print(f"Reminder QA auto-sent ({len(rows)} tiket, {len(grouped)} reporter).")
+    try:
+        rows = run_query(send_reminder.QUERY)
+        if not rows:
+            print("Reminder QA: tidak ada tiket, skip kirim.")
+            backend.log_auto_send("reminder", 0, "skipped_no_tickets")
+            return
+        grouped = send_reminder.group_tickets(rows)
+        message = send_reminder.build_message(grouped)
+        send_telegram(message)
+        print(f"Reminder QA auto-sent ({len(rows)} tiket, {len(grouped)} reporter).")
+        backend.log_auto_send("reminder", len(rows), "sent")
+    except Exception as e:
+        print(f"Reminder QA auto-send error: {e}")
+        backend.log_auto_send("reminder", None, f"error: {e}"[:200])
+        raise
 
 
 def run_report():
-    rows = run_query(generate_report.QUERY)
-    if not rows:
-        print("Report Rekap: tidak ada tiket, skip kirim.")
-        return
-    grouped = generate_report.group_tickets(rows)
-    message = generate_report.build_message(grouped)
-    send_telegram(message)
-    print(f"Report Rekap auto-sent ({len(rows)} tiket, {len(grouped)} reporter).")
+    try:
+        rows = run_query(generate_report.QUERY)
+        if not rows:
+            print("Report Rekap: tidak ada tiket, skip kirim.")
+            backend.log_auto_send("report", 0, "skipped_no_tickets")
+            return
+        grouped = generate_report.group_tickets(rows)
+        message = generate_report.build_message(grouped)
+        send_telegram(message)
+        print(f"Report Rekap auto-sent ({len(rows)} tiket, {len(grouped)} reporter).")
+        backend.log_auto_send("report", len(rows), "sent")
+    except Exception as e:
+        print(f"Report Rekap auto-send error: {e}")
+        backend.log_auto_send("report", None, f"error: {e}"[:200])
+        raise
 
 
 def main():
