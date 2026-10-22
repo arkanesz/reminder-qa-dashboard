@@ -717,17 +717,42 @@ def main():
 
     pages = {
         "Tiket": [
-            st.Page(page_reminder, title="Reminder QA", icon="📋", default=True),
-            st.Page(page_report, title="Report Rekap", icon="📊"),
-            st.Page(lambda: page_warning(user["email"]), title="Tiket Warning (< 24 Jam)", icon="⏳"),
-            st.Page(lambda: page_stale(user["email"]), title="Tiket Mangkrak", icon="🔥"),
-            st.Page(lambda: page_history(user["email"]), title="Riwayat Follow-up", icon="🕑"),
+            st.Page(page_reminder, title="Reminder QA", icon="📋", url_path="reminder", default=True),
+            st.Page(page_report, title="Report Rekap", icon="📊", url_path="report"),
+            st.Page(
+                lambda: page_warning(user["email"]),
+                title="Tiket Warning (< 24 Jam)",
+                icon="⏳",
+                url_path="warning",
+            ),
+            st.Page(
+                lambda: page_stale(user["email"]),
+                title="Tiket Mangkrak",
+                icon="🔥",
+                url_path="mangkrak",
+            ),
+            st.Page(
+                lambda: page_history(user["email"]),
+                title="Riwayat Follow-up",
+                icon="🕑",
+                url_path="riwayat",
+            ),
         ],
     }
     if user["is_admin"]:
         pages["Admin"] = [
-            st.Page(lambda: page_admin(user["email"]), title="Aktivasi User", icon="👤"),
-            st.Page(lambda: page_settings(user["email"]), title="Pengaturan", icon="⚙️"),
+            st.Page(
+                lambda: page_admin(user["email"]),
+                title="Aktivasi User",
+                icon="👤",
+                url_path="admin-aktivasi",
+            ),
+            st.Page(
+                lambda: page_settings(user["email"]),
+                title="Pengaturan",
+                icon="⚙️",
+                url_path="pengaturan",
+            ),
         ]
 
     nav = st.navigation(pages)
