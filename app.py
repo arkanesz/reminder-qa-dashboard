@@ -1,6 +1,6 @@
 import re
 import urllib.parse
-from datetime import timedelta, timezone
+from datetime import time, timedelta, timezone
 
 import streamlit as st
 from streamlit_cookies_controller import CookieController
@@ -59,6 +59,20 @@ def cached_signed_urls_batch(storage_paths):
 @st.cache_data(ttl=30, show_spinner=False)
 def cached_wa_log_batch(issue_codes):
     return backend.get_wa_log_batch(issue_codes)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_bot_info():
+    try:
+        return common.get_telegram_bot_info()
+    except Exception:
+        return None
+
+
+def telegram_bot_caption():
+    bot_info = cached_bot_info()
+    if bot_info and bot_info.get("username"):
+        st.caption(f"📤 Bot Telegram: @{bot_info['username']}")
 
 
 TICKET_LOOKUP_QUERY = """
@@ -339,6 +353,7 @@ def page_reminder():
             message = send_reminder.build_message(grouped)
             common.send_telegram(message)
             st.success(f"Terkirim ke Telegram ({len(rows)} tiket, {len(grouped)} reporter).")
+        telegram_bot_caption()
 
     if not rows:
         st.info("Tidak ada tiket Ready For QA / In QA / Pending QA / Checking saat ini.")
@@ -372,6 +387,7 @@ def page_report():
             common.send_telegram(message)
             total = sum(len(v) for v in grouped.values())
             st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
+        telegram_bot_caption()
 
     if not rows:
         st.info("Tidak ada tiket untuk direkap.")
@@ -457,6 +473,7 @@ def render_ticket_list_page(
             common.send_telegram(message)
             total = sum(len(v) for v in grouped.values())
             st.success(f"Terkirim ke Telegram ({total} tiket, {len(grouped)} reporter).")
+        telegram_bot_caption()
 
     if not grouped:
         st.info(empty_message)
@@ -597,6 +614,72 @@ def page_admin(admin_email):
         st.write(f"- {name} ({email})")
 
 
+def _parse_hhmm(value, fallback):
+    try:
+        hour, minute = value.split(":")
+        return time(int(hour), int(minute))
+    except (AttributeError, ValueError):
+        return fallback
+
+
+def page_settings(admin_email):
+    st.header("Pengaturan")
+    st.caption(
+        "Atur jadwal auto-kirim Reminder QA dan Report Rekap ke Telegram. "
+        "Jadwal ini dijalankan oleh GitHub Actions (cek berkala), bukan oleh app Streamlit ini — "
+        "jadi tetap jalan walau tidak ada yang buka dashboard ini."
+    )
+
+    settings = backend.get_all_settings()
+
+    st.subheader("Reminder QA Otomatis")
+    reminder_enabled = st.checkbox(
+        "Aktifkan auto-kirim Reminder QA",
+        value=settings.get("reminder_auto_enabled") == "true",
+        key="set_reminder_enabled",
+    )
+    reminder_time = st.time_input(
+        "Jam kirim (WIB)",
+        value=_parse_hhmm(settings.get("reminder_auto_time"), time(9, 0)),
+        key="set_reminder_time",
+    )
+
+    st.divider()
+    st.subheader("Report Rekap Otomatis")
+    report_enabled = st.checkbox(
+        "Aktifkan auto-kirim Report Rekap",
+        value=settings.get("report_auto_enabled") == "true",
+        key="set_report_enabled",
+    )
+    report_time = st.time_input(
+        "Jam kirim (WIB)",
+        value=_parse_hhmm(settings.get("report_auto_time"), time(16, 0)),
+        key="set_report_time",
+    )
+
+    st.divider()
+    if st.button("💾 Simpan Pengaturan"):
+        backend.set_setting(
+            "reminder_auto_enabled", "true" if reminder_enabled else "false", admin_email
+        )
+        backend.set_setting("reminder_auto_time", reminder_time.strftime("%H:%M"), admin_email)
+        backend.set_setting(
+            "report_auto_enabled", "true" if report_enabled else "false", admin_email
+        )
+        backend.set_setting("report_auto_time", report_time.strftime("%H:%M"), admin_email)
+        st.success("Pengaturan tersimpan.")
+
+    last_reminder = settings.get("reminder_last_sent_date")
+    last_report = settings.get("report_last_sent_date")
+    if last_reminder or last_report:
+        st.divider()
+        st.caption("Terakhir dikirim otomatis:")
+        if last_reminder:
+            st.write(f"- Reminder QA: {last_reminder}")
+        if last_report:
+            st.write(f"- Report Rekap: {last_report}")
+
+
 def main():
     cookies = CookieController()
 
@@ -632,30 +715,23 @@ def main():
         st.session_state.user = None
         st.rerun()
 
-    menu_options = [
-        "Reminder QA",
-        "Report Rekap",
-        "Tiket Warning (< 24 Jam)",
-        "Tiket Mangkrak",
-        "Riwayat Follow-up",
-    ]
+    pages = {
+        "Tiket": [
+            st.Page(page_reminder, title="Reminder QA", icon="📋", default=True),
+            st.Page(page_report, title="Report Rekap", icon="📊"),
+            st.Page(lambda: page_warning(user["email"]), title="Tiket Warning (< 24 Jam)", icon="⏳"),
+            st.Page(lambda: page_stale(user["email"]), title="Tiket Mangkrak", icon="🔥"),
+            st.Page(lambda: page_history(user["email"]), title="Riwayat Follow-up", icon="🕑"),
+        ],
+    }
     if user["is_admin"]:
-        menu_options.append("Admin - Aktivasi User")
+        pages["Admin"] = [
+            st.Page(lambda: page_admin(user["email"]), title="Aktivasi User", icon="👤"),
+            st.Page(lambda: page_settings(user["email"]), title="Pengaturan", icon="⚙️"),
+        ]
 
-    page = st.sidebar.radio("Menu", menu_options)
-
-    if page == "Reminder QA":
-        page_reminder()
-    elif page == "Report Rekap":
-        page_report()
-    elif page == "Tiket Warning (< 24 Jam)":
-        page_warning(user["email"])
-    elif page == "Tiket Mangkrak":
-        page_stale(user["email"])
-    elif page == "Riwayat Follow-up":
-        page_history(user["email"])
-    elif page == "Admin - Aktivasi User":
-        page_admin(user["email"])
+    nav = st.navigation(pages)
+    nav.run()
 
 
 main()

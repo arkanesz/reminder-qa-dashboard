@@ -28,6 +28,13 @@ def run_query(query, params=None):
     return rows
 
 
+def get_telegram_bot_info():
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    resp = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=10)
+    resp.raise_for_status()
+    return resp.json()["result"]
+
+
 def send_telegram(message):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]

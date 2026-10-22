@@ -1,0 +1,33 @@
+name: Scheduled QA Reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-scheduler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements-scheduler.txt
+
+      - run: python scheduled_runner.py
+        env:
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: ${{ secrets.PGPORT }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPAHOST: ${{ secrets.SUPAHOST }}
+          SUPAPORT: ${{ secrets.SUPAPORT }}
+          SUPADATABASE: ${{ secrets.SUPADATABASE }}
+          SUPAUSER: ${{ secrets.SUPAUSER }}
+          SUPAPASSWORD: ${{ secrets.SUPAPASSWORD }}

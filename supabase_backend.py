@@ -83,6 +83,46 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qadash_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_by TEXT,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_all_settings():
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT key, value FROM qadash_settings")
+            return dict(cur.fetchall())
+    finally:
+        conn.close()
+
+
+def set_setting(key, value, updated_by=None):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO qadash_settings (key, value, updated_by, updated_at)
+                VALUES (%s, %s, %s, now())
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (key, value, updated_by),
+            )
         conn.commit()
     finally:
         conn.close()
