@@ -381,6 +381,9 @@ def page_report():
                 st.markdown(f"- [{issue_code}] {title} ({label}) - {status}")
 
 
+DASHBOARD_STATUS_OPTIONS = check_stale_tickets.ALL_STALE_STATUSES + ["Done QA"]
+
+
 def render_ticket_list_page(
     current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
 ):
@@ -388,7 +391,7 @@ def render_ticket_list_page(
 
     selected_statuses = st.multiselect(
         "Filter status",
-        check_stale_tickets.ALL_STALE_STATUSES,
+        DASHBOARD_STATUS_OPTIONS,
         default=check_stale_tickets.ALL_STALE_STATUSES,
         key=f"statuses_{key_prefix}",
     )
