@@ -529,6 +529,9 @@ def page_warning(current_user_email):
     )
 
 
+HISTORY_PAGE_SIZE = 10
+
+
 def page_history(current_user_email):
     st.header("Riwayat Follow-up")
     st.caption(
@@ -543,6 +546,7 @@ def page_history(current_user_email):
         cached_signed_urls_batch.clear()
         cached_wa_log_batch.clear()
         clear_proof_state()
+        st.session_state["history_page"] = 0
         st.rerun()
 
     with st.spinner("Memuat riwayat..."):
@@ -550,17 +554,30 @@ def page_history(current_user_email):
         if not issue_codes:
             st.info("Belum ada riwayat follow-up.")
             return
-        ticket_rows = cached_query(TICKET_LOOKUP_QUERY, {"codes": list(issue_codes)})
+
+    total_items = len(issue_codes)
+    total_pages = max(1, (total_items + HISTORY_PAGE_SIZE - 1) // HISTORY_PAGE_SIZE)
+
+    if "history_page" not in st.session_state:
+        st.session_state["history_page"] = 0
+    st.session_state["history_page"] = min(st.session_state["history_page"], total_pages - 1)
+    current_page = st.session_state["history_page"]
+
+    start = current_page * HISTORY_PAGE_SIZE
+    page_codes = issue_codes[start : start + HISTORY_PAGE_SIZE]
+
+    with st.spinner("Memuat detail tiket..."):
+        ticket_rows = cached_query(TICKET_LOOKUP_QUERY, {"codes": list(page_codes)})
         ticket_info = {row[0]: row[1:] for row in ticket_rows}
 
-        followups_by_code = cached_followups_batch(tuple(issue_codes))
+        followups_by_code = cached_followups_batch(tuple(page_codes))
         all_storage_paths = tuple(
             p[1] for proofs in followups_by_code.values() for p in proofs if p[1]
         )
         signed_urls_by_path = cached_signed_urls_batch(all_storage_paths)
-        wa_log_by_code = cached_wa_log_batch(tuple(issue_codes))
+        wa_log_by_code = cached_wa_log_batch(tuple(page_codes))
 
-    for issue_code in issue_codes:
+    for issue_code in page_codes:
         info = ticket_info.get(issue_code)
         if info:
             title, status, issue_link = info
@@ -578,6 +595,19 @@ def page_history(current_user_email):
                 initial_signed_urls=signed_urls_by_path,
                 initial_wa_log=wa_log_by_code.get(issue_code, []),
             )
+
+    st.divider()
+    col_prev, col_info, col_next = st.columns([1, 2, 1])
+    with col_prev:
+        if st.button("⬅️ Sebelumnya", disabled=current_page == 0, key="history_prev"):
+            st.session_state["history_page"] -= 1
+            st.rerun()
+    with col_info:
+        st.write(f"Halaman {current_page + 1} dari {total_pages} ({total_items} tiket)")
+    with col_next:
+        if st.button("Berikutnya ➡️", disabled=current_page >= total_pages - 1, key="history_next"):
+            st.session_state["history_page"] += 1
+            st.rerun()
 
 
 def page_admin(admin_email):
