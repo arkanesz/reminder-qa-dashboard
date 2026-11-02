@@ -376,7 +376,8 @@ def page_reminder():
     st.header("Reminder QA")
     st.caption(
         "Daftar tiket yang menunggu testing (Ready For QA, In QA, Pending QA, Checking), "
-        "dikelompokkan per reporter beserta link tiketnya."
+        "dikelompokkan per reporter beserta link tiketnya. Tombol \"Kirim ke Telegram\" "
+        "memformat pesan ini untuk di-share ke grup management."
     )
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(send_reminder.QUERY)
@@ -413,7 +414,8 @@ def page_report():
     st.header("Report Rekap Ready For QA")
     st.caption(
         "Rekap jumlah tiket utama dan subtask per reporter untuk status "
-        "Ready For QA, In QA, Pending QA, dan Checking."
+        "Ready For QA, In QA, Pending QA, dan Checking. Tombol \"Kirim ke Telegram\" "
+        "memformat pesan ini sebagai laporan untuk dikirim ke atasan."
     )
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(generate_report.QUERY)
