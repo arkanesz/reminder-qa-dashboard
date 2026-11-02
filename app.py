@@ -324,7 +324,7 @@ def show_lavender_connection_error(exc):
 
 
 def login_form(cookies):
-    st.title("Login - QA Dashboard")
+    st.title("Scrum Master Dashboard Monitoring")
     with st.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
