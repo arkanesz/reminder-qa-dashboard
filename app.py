@@ -374,6 +374,10 @@ def login_form(cookies):
 
 def page_reminder():
     st.header("Reminder QA")
+    st.caption(
+        "Daftar tiket yang menunggu testing (Ready For QA, In QA, Pending QA, Checking), "
+        "dikelompokkan per reporter beserta link tiketnya."
+    )
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(send_reminder.QUERY)
     grouped = send_reminder.group_tickets(rows) if rows else {}
@@ -407,6 +411,10 @@ def page_reminder():
 
 def page_report():
     st.header("Report Rekap Ready For QA")
+    st.caption(
+        "Rekap jumlah tiket utama dan subtask per reporter untuk status "
+        "Ready For QA, In QA, Pending QA, dan Checking."
+    )
     with st.spinner("Memuat data tiket..."):
         rows = cached_query(generate_report.QUERY)
     grouped = generate_report.group_tickets(rows) if rows else {}
@@ -449,9 +457,17 @@ DASHBOARD_STATUS_OPTIONS = check_stale_tickets.ALL_STALE_STATUSES + ["Done QA"]
 
 
 def render_ticket_list_page(
-    current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
+    current_user_email,
+    page_title,
+    page_description,
+    min_hours,
+    max_hours,
+    key_prefix,
+    telegram_title,
+    empty_message,
 ):
     st.header(page_title)
+    st.caption(page_description)
 
     selected_statuses = st.multiselect(
         "Filter status",
@@ -565,6 +581,10 @@ def page_stale(current_user_email):
     render_ticket_list_page(
         current_user_email,
         page_title="Tiket Mangkrak (> 24 Jam)",
+        page_description=(
+            "Tiket yang statusnya belum berubah selama 24 jam atau lebih sejak "
+            "terakhir diubah — perlu segera di-follow-up ke reporter."
+        ),
         min_hours=24,
         max_hours=None,
         key_prefix="stale",
@@ -577,6 +597,10 @@ def page_warning(current_user_email):
     render_ticket_list_page(
         current_user_email,
         page_title="Tiket Warning (< 24 Jam)",
+        page_description=(
+            "Tiket yang statusnya belum berubah kurang dari 24 jam — belum mangkrak, "
+            "tapi mulai perlu dipantau sebelum lewat 24 jam."
+        ),
         min_hours=0,
         max_hours=24,
         key_prefix="warning",
