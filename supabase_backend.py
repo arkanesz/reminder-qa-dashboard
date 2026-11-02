@@ -143,6 +143,25 @@ def get_auto_send_log(limit=20):
         conn.close()
 
 
+def get_failed_auto_send_log(limit=7):
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT send_type, ticket_count, status, sent_at
+                FROM qadash_auto_send_log
+                WHERE status LIKE 'error%%'
+                ORDER BY sent_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
 def get_all_settings():
     conn = get_pg_connection()
     try:
