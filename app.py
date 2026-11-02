@@ -443,7 +443,6 @@ def page_report():
 DASHBOARD_STATUS_OPTIONS = check_stale_tickets.ALL_STALE_STATUSES + ["Done QA"]
 
 
-@st.fragment
 def render_ticket_list_page(
     current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
 ):
@@ -584,7 +583,6 @@ def page_warning(current_user_email):
 HISTORY_PAGE_SIZE = 10
 
 
-@st.fragment
 def page_history(current_user_email):
     st.header("Riwayat Follow-up")
     st.caption(
@@ -654,16 +652,15 @@ def page_history(current_user_email):
     with col_prev:
         if st.button("⬅️ Sebelumnya", disabled=current_page == 0, key="history_prev"):
             st.session_state["history_page"] -= 1
-            st.rerun(scope="fragment")
+            st.rerun()
     with col_info:
         st.write(f"Halaman {current_page + 1} dari {total_pages} ({total_items} tiket)")
     with col_next:
         if st.button("Berikutnya ➡️", disabled=current_page >= total_pages - 1, key="history_next"):
             st.session_state["history_page"] += 1
-            st.rerun(scope="fragment")
+            st.rerun()
 
 
-@st.fragment
 def page_summary():
     st.header("Summary")
     st.caption("Ringkasan jumlah tiket per status, total per reporter.")
