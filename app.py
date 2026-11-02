@@ -324,11 +324,16 @@ def show_lavender_connection_error(exc):
 
 
 def login_form(cookies):
-    st.title("Scrum Master Dashboard Monitoring")
-    with st.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
+    col_left, col_mid, col_right = st.columns([1, 1.2, 1])
+    with col_mid:
+        st.markdown(
+            "<h1 style='text-align: center;'>Scrum Master Dashboard Monitoring</h1>",
+            unsafe_allow_html=True,
+        )
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Login")
 
     if not submitted:
         return
