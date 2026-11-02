@@ -10,6 +10,7 @@ STALE_THRESHOLD_HOURS = 24
 QUERY = """
 SELECT
   us1.name AS reporter,
+  us2.name AS assignee,
   p.key || '-' || i.key_num AS issue_code,
   i.title,
   wfstat.name AS status,
@@ -29,6 +30,7 @@ FROM issues i
 LEFT JOIN issues parent ON parent.id = i.parent_issue_id
 LEFT JOIN projects p ON i.project_id = p.id
 LEFT JOIN users us1 ON us1.id = i.reporter_id
+LEFT JOIN users us2 ON us2.id = i.assignee_id
 LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
 LEFT JOIN issue_types itp ON itp.id = i.type_id
 WHERE
@@ -49,7 +51,7 @@ def elapsed(changed_at):
 
 def group_by_elapsed(rows, min_hours=0, max_hours=None):
     by_reporter = defaultdict(list)
-    for reporter, issue_code, title, status, issue_link, changed_at in rows:
+    for reporter, assignee, issue_code, title, status, issue_link, changed_at in rows:
         days, hours, minutes = elapsed(changed_at)
         total_hours = days * 24 + hours
         if total_hours < min_hours:

@@ -1,5 +1,6 @@
 import re
 import urllib.parse
+from collections import defaultdict
 from datetime import time, timedelta, timezone
 
 import streamlit as st
@@ -87,11 +88,40 @@ LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
 WHERE (p.key || '-' || i.key_num) = ANY(%(codes)s)
 """
 
+SUMMARY_QUERY = """
+SELECT
+  (
+    SELECT NULLIF(COUNT(sub.id), 0)
+    FROM issues sub
+    WHERE sub.parent_issue_id = i.id
+  ) AS total_subtasks,
+  us1.name AS reporter,
+  wfstat.name AS status
+FROM issues i
+LEFT JOIN issues parent ON parent.id = i.parent_issue_id
+LEFT JOIN projects p ON i.project_id = p.id
+LEFT JOIN users us1 ON us1.id = i.reporter_id
+LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
+LEFT JOIN issue_types itp ON itp.id = i.type_id
+WHERE
+  wfstat.name IN %(statuses)s
+  AND (itp.name != 'Sub-task' OR itp.name IS NULL)
+  AND p.key || '-' || parent.key_num IS NULL
+"""
+
 
 def clear_proof_state():
     for key in list(st.session_state.keys()):
         if key.startswith("proofs_state_"):
             del st.session_state[key]
+
+
+def multiselect_with_reset(label, options, key):
+    if key not in st.session_state:
+        st.session_state[key] = list(options)
+    else:
+        st.session_state[key] = [v for v in st.session_state[key] if v in options]
+    return st.multiselect(label, options, key=key)
 
 
 def format_wa_number(raw):
@@ -421,7 +451,7 @@ def render_ticket_list_page(
     selected_statuses = st.multiselect(
         "Filter status",
         DASHBOARD_STATUS_OPTIONS,
-        default=check_stale_tickets.ALL_STALE_STATUSES,
+        default=DASHBOARD_STATUS_OPTIONS,
         key=f"statuses_{key_prefix}",
     )
     if not selected_statuses:
@@ -432,10 +462,31 @@ def render_ticket_list_page(
         rows = cached_query(
             check_stale_tickets.QUERY, {"statuses": tuple(selected_statuses)}
         )
-        grouped = check_stale_tickets.group_by_elapsed(
-            rows, min_hours=min_hours, max_hours=max_hours
+
+    reporter_options = sorted({r[0] or "(Tanpa Reporter)" for r in rows})
+    assignee_options = sorted({r[1] or "(Tanpa Assignee)" for r in rows})
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        selected_reporters = multiselect_with_reset(
+            "Filter reporter", reporter_options, key=f"reporters_{key_prefix}"
+        )
+    with col_f2:
+        selected_assignees = multiselect_with_reset(
+            "Filter assignee (programmer)", assignee_options, key=f"assignees_{key_prefix}"
         )
 
+    rows = [
+        r
+        for r in rows
+        if (r[0] or "(Tanpa Reporter)") in selected_reporters
+        and (r[1] or "(Tanpa Assignee)") in selected_assignees
+    ]
+
+    grouped = check_stale_tickets.group_by_elapsed(
+        rows, min_hours=min_hours, max_hours=max_hours
+    )
+    with st.spinner("Memuat detail tiket..."):
         phone_map = {}
         saved_phone_map = {}
         followups_by_code = {}
@@ -608,6 +659,59 @@ def page_history(current_user_email):
         if st.button("Berikutnya ➡️", disabled=current_page >= total_pages - 1, key="history_next"):
             st.session_state["history_page"] += 1
             st.rerun()
+
+
+def page_summary():
+    st.header("Summary")
+    st.caption(
+        "Ringkasan jumlah tiket per status (Ready For QA, Pending QA, Code Review, Checking), "
+        "total per reporter."
+    )
+
+    if st.button("🔄 Refresh data", key="refresh_summary"):
+        cached_query.clear()
+        st.rerun()
+
+    with st.spinner("Memuat data..."):
+        rows = cached_query(
+            SUMMARY_QUERY, {"statuses": tuple(check_stale_tickets.ALL_STALE_STATUSES)}
+        )
+
+    by_status = defaultdict(lambda: defaultdict(list))
+    for total_subtasks, reporter, status in rows:
+        reporter = reporter or "(Tanpa Reporter)"
+        by_status[status][reporter].append(total_subtasks)
+
+    for status in check_stale_tickets.ALL_STALE_STATUSES:
+        reporter_data = by_status.get(status, {})
+        total_main = sum(len(v) for v in reporter_data.values())
+        total_subtask = sum(sum(t for t in v if t) for v in reporter_data.values())
+
+        st.subheader(status)
+        col1, col2 = st.columns(2)
+        col1.metric("Total Tiket (tanpa subtask)", total_main)
+        col2.metric("Total Subtask", total_subtask)
+
+        if reporter_data:
+            st.caption("Per Reporter:")
+            reporters_sorted = sorted(reporter_data.items())
+            for i in range(0, len(reporters_sorted), 4):
+                chunk = reporters_sorted[i : i + 4]
+                cols = st.columns(4)
+                for col, (reporter, subtask_list) in zip(cols, chunk):
+                    main_count = len(subtask_list)
+                    subtask_count = sum(t for t in subtask_list if t)
+                    with col:
+                        st.metric(
+                            reporter,
+                            f"{main_count} tiket",
+                            f"{subtask_count} subtask",
+                            delta_color="off",
+                        )
+        else:
+            st.caption("Tidak ada tiket.")
+
+        st.divider()
 
 
 def page_admin(admin_email):
@@ -787,6 +891,7 @@ def main():
                 icon="🕑",
                 url_path="riwayat",
             ),
+            st.Page(page_summary, title="Summary", icon="📈", url_path="summary"),
         ],
     }
     if user["is_admin"]:
