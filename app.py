@@ -443,6 +443,7 @@ def page_report():
 DASHBOARD_STATUS_OPTIONS = check_stale_tickets.ALL_STALE_STATUSES + ["Done QA"]
 
 
+@st.fragment
 def render_ticket_list_page(
     current_user_email, page_title, min_hours, max_hours, key_prefix, telegram_title, empty_message
 ):
@@ -583,6 +584,7 @@ def page_warning(current_user_email):
 HISTORY_PAGE_SIZE = 10
 
 
+@st.fragment
 def page_history(current_user_email):
     st.header("Riwayat Follow-up")
     st.caption(
@@ -652,45 +654,61 @@ def page_history(current_user_email):
     with col_prev:
         if st.button("⬅️ Sebelumnya", disabled=current_page == 0, key="history_prev"):
             st.session_state["history_page"] -= 1
-            st.rerun()
+            st.rerun(scope="fragment")
     with col_info:
         st.write(f"Halaman {current_page + 1} dari {total_pages} ({total_items} tiket)")
     with col_next:
         if st.button("Berikutnya ➡️", disabled=current_page >= total_pages - 1, key="history_next"):
             st.session_state["history_page"] += 1
-            st.rerun()
+            st.rerun(scope="fragment")
 
 
+@st.fragment
 def page_summary():
     st.header("Summary")
-    st.caption(
-        "Ringkasan jumlah tiket per status (Ready For QA, Pending QA, Code Review, Checking), "
-        "total per reporter."
-    )
+    st.caption("Ringkasan jumlah tiket per status, total per reporter.")
 
     if st.button("🔄 Refresh data", key="refresh_summary"):
         cached_query.clear()
         st.rerun()
 
     with st.spinner("Memuat data..."):
-        rows = cached_query(
-            SUMMARY_QUERY, {"statuses": tuple(check_stale_tickets.ALL_STALE_STATUSES)}
+        rows = cached_query(SUMMARY_QUERY, {"statuses": tuple(DASHBOARD_STATUS_OPTIONS)})
+
+    reporter_options = sorted({r[1] or "(Tanpa Reporter)" for r in rows})
+
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        selected_statuses = multiselect_with_reset(
+            "Filter status", DASHBOARD_STATUS_OPTIONS, key="summary_statuses"
         )
+    with col_f2:
+        selected_reporters = multiselect_with_reset(
+            "Filter reporter", reporter_options, key="summary_reporters"
+        )
+
+    rows = [
+        r
+        for r in rows
+        if r[2] in selected_statuses and (r[1] or "(Tanpa Reporter)") in selected_reporters
+    ]
 
     by_status = defaultdict(lambda: defaultdict(list))
     for total_subtasks, reporter, status in rows:
         reporter = reporter or "(Tanpa Reporter)"
         by_status[status][reporter].append(total_subtasks)
 
-    for status in check_stale_tickets.ALL_STALE_STATUSES:
+    for status in selected_statuses:
         reporter_data = by_status.get(status, {})
         total_main = sum(len(v) for v in reporter_data.values())
         total_subtask = sum(sum(t for t in v if t) for v in reporter_data.values())
 
         st.subheader(status)
         col1, col2 = st.columns(2)
-        col1.metric("Total Tiket (tanpa subtask)", total_main)
-        col2.metric("Total Subtask", total_subtask)
+        with col1, st.container(border=True):
+            st.metric("Total Tiket (tanpa subtask)", total_main)
+        with col2, st.container(border=True):
+            st.metric("Total Subtask", total_subtask)
 
         if reporter_data:
             st.caption("Per Reporter:")
@@ -701,7 +719,7 @@ def page_summary():
                 for col, (reporter, subtask_list) in zip(cols, chunk):
                     main_count = len(subtask_list)
                     subtask_count = sum(t for t in subtask_list if t)
-                    with col:
+                    with col, st.container(border=True):
                         st.metric(
                             reporter,
                             f"{main_count} tiket",
@@ -873,6 +891,9 @@ def main():
         "Tiket": [
             st.Page(page_reminder, title="Reminder QA", icon="📋", url_path="reminder", default=True),
             st.Page(page_report, title="Report Rekap", icon="📊", url_path="report"),
+            st.Page(page_summary, title="Summary", icon="📈", url_path="summary"),
+        ],
+        "Follow Up": [
             st.Page(
                 lambda: page_warning(user["email"]),
                 title="Tiket Warning (< 24 Jam)",
@@ -891,7 +912,6 @@ def main():
                 icon="🕑",
                 url_path="riwayat",
             ),
-            st.Page(page_summary, title="Summary", icon="📈", url_path="summary"),
         ],
     }
     if user["is_admin"]:
