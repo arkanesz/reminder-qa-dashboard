@@ -8,6 +8,10 @@ BULAN_ID = [
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ]
 
+DEFAULT_STATUSES = ["Ready For QA", "In QA", "Pending QA", "Checking"]
+EXTRA_STATUSES = ["Code Review", "In Progress", "Done QA"]
+ALL_STATUS_OPTIONS = DEFAULT_STATUSES + EXTRA_STATUSES
+
 QUERY = """
 SELECT
   p.key || '-' || i.key_num AS issue_code,
@@ -26,7 +30,7 @@ LEFT JOIN users us1 ON us1.id = i.reporter_id
 LEFT JOIN workflow_statuses wfstat ON wfstat.id = i.status_id
 LEFT JOIN issue_types itp ON itp.id = i.type_id
 WHERE
-  wfstat.name IN ('Ready For QA', 'In QA', 'Pending QA', 'Checking')
+  wfstat.name IN %(statuses)s
   AND (itp.name != 'Sub-task' OR itp.name IS NULL)
   AND p.key || '-' || parent.key_num IS NULL
 ORDER BY us1.name ASC;
@@ -71,7 +75,7 @@ def build_message(grouped):
 
 
 def main():
-    rows = run_query(QUERY)
+    rows = run_query(QUERY, {"statuses": tuple(DEFAULT_STATUSES)})
     if not rows:
         print("Tidak ada tiket untuk direkap.")
         return

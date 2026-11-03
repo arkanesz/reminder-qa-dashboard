@@ -116,9 +116,9 @@ def clear_proof_state():
             del st.session_state[key]
 
 
-def multiselect_with_reset(label, options, key):
+def multiselect_with_reset(label, options, key, default=None):
     if key not in st.session_state:
-        st.session_state[key] = list(options)
+        st.session_state[key] = list(default) if default is not None else list(options)
     else:
         st.session_state[key] = [v for v in st.session_state[key] if v in options]
     return st.multiselect(label, options, key=key)
@@ -413,12 +413,22 @@ def page_reminder():
 def page_report():
     st.header("Report Rekap Ready For QA")
     st.caption(
-        "Rekap jumlah tiket utama dan subtask per reporter untuk status "
-        "Ready For QA, In QA, Pending QA, dan Checking. Tombol \"Kirim ke Telegram\" "
+        "Rekap jumlah tiket utama dan subtask per reporter. Tombol \"Kirim ke Telegram\" "
         "memformat pesan ini sebagai laporan untuk dikirim ke atasan."
     )
+
+    selected_statuses = multiselect_with_reset(
+        "Filter status",
+        generate_report.ALL_STATUS_OPTIONS,
+        key="report_statuses",
+        default=generate_report.DEFAULT_STATUSES,
+    )
+    if not selected_statuses:
+        st.warning("Pilih minimal 1 status.")
+        return
+
     with st.spinner("Memuat data tiket..."):
-        rows = cached_query(generate_report.QUERY)
+        rows = cached_query(generate_report.QUERY, {"statuses": tuple(selected_statuses)})
     grouped = generate_report.group_tickets(rows) if rows else {}
 
     col1, col2 = st.columns(2)
