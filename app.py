@@ -735,6 +735,22 @@ def page_summary():
         reporter = reporter or "(Tanpa Reporter)"
         by_status[status][reporter].append(total_subtasks)
 
+    grand_total_main = sum(
+        len(v) for reporter_data in by_status.values() for v in reporter_data.values()
+    )
+    grand_total_subtask = sum(
+        sum(t for t in v if t)
+        for reporter_data in by_status.values()
+        for v in reporter_data.values()
+    )
+    with st.container(border=True):
+        st.metric(
+            "Total Semua Status",
+            f"{grand_total_main} Tiket",
+            f"{grand_total_subtask} Subtask",
+            delta_color="off",
+        )
+
     status_cols = st.columns(len(selected_statuses)) if selected_statuses else []
     for col, status in zip(status_cols, selected_statuses):
         reporter_data = by_status.get(status, {})
@@ -748,15 +764,23 @@ def page_summary():
                 f"{total_subtask} Subtask",
                 delta_color="off",
             )
-            with st.expander("Lihat per reporter"):
-                if reporter_data:
-                    reporters_sorted = sorted(reporter_data.items())
-                    for reporter, subtask_list in reporters_sorted:
+
+    for status in selected_statuses:
+        reporter_data = by_status.get(status, {})
+        with st.expander(f"Lihat per reporter — {status}"):
+            if reporter_data:
+                reporters_sorted = sorted(reporter_data.items())
+                for i in range(0, len(reporters_sorted), 4):
+                    chunk = reporters_sorted[i : i + 4]
+                    cols = st.columns(4)
+                    for c, (reporter, subtask_list) in zip(cols, chunk):
                         main_count = len(subtask_list)
                         subtask_count = sum(t for t in subtask_list if t)
-                        st.write(f"**{reporter}** — {main_count} tiket, {subtask_count} subtask")
-                else:
-                    st.caption("Tidak ada tiket.")
+                        with c:
+                            st.write(f"**{reporter}**")
+                            st.caption(f"{main_count} tiket, {subtask_count} subtask")
+            else:
+                st.caption("Tidak ada tiket.")
 
 
 def page_admin(admin_email):
