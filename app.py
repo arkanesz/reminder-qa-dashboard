@@ -410,7 +410,7 @@ def page_reminder():
 
 
 def page_report():
-    st.header("Report Rekap Ready For QA")
+    st.header("Report Rekap")
     st.caption(
         "Rekap jumlah tiket utama dan subtask per reporter. Tombol \"Kirim ke Telegram\" "
         "memformat pesan ini sebagai laporan untuk dikirim ke atasan."
@@ -735,38 +735,28 @@ def page_summary():
         reporter = reporter or "(Tanpa Reporter)"
         by_status[status][reporter].append(total_subtasks)
 
-    for status in selected_statuses:
+    status_cols = st.columns(len(selected_statuses)) if selected_statuses else []
+    for col, status in zip(status_cols, selected_statuses):
         reporter_data = by_status.get(status, {})
         total_main = sum(len(v) for v in reporter_data.values())
         total_subtask = sum(sum(t for t in v if t) for v in reporter_data.values())
 
-        st.subheader(status)
-        col1, col2 = st.columns(2)
-        with col1, st.container(border=True):
-            st.metric("Total Tiket (tanpa subtask)", total_main)
-        with col2, st.container(border=True):
-            st.metric("Total Subtask", total_subtask)
-
-        if reporter_data:
-            st.caption("Per Reporter:")
-            reporters_sorted = sorted(reporter_data.items())
-            for i in range(0, len(reporters_sorted), 4):
-                chunk = reporters_sorted[i : i + 4]
-                cols = st.columns(4)
-                for col, (reporter, subtask_list) in zip(cols, chunk):
-                    main_count = len(subtask_list)
-                    subtask_count = sum(t for t in subtask_list if t)
-                    with col, st.container(border=True):
-                        st.metric(
-                            reporter,
-                            f"{main_count} tiket",
-                            f"{subtask_count} subtask",
-                            delta_color="off",
-                        )
-        else:
-            st.caption("Tidak ada tiket.")
-
-        st.divider()
+        with col, st.container(border=True):
+            st.metric(
+                status,
+                f"{total_main} Tiket",
+                f"{total_subtask} Subtask",
+                delta_color="off",
+            )
+            with st.expander("Lihat per reporter"):
+                if reporter_data:
+                    reporters_sorted = sorted(reporter_data.items())
+                    for reporter, subtask_list in reporters_sorted:
+                        main_count = len(subtask_list)
+                        subtask_count = sum(t for t in subtask_list if t)
+                        st.write(f"**{reporter}** — {main_count} tiket, {subtask_count} subtask")
+                else:
+                    st.caption("Tidak ada tiket.")
 
 
 def page_admin(admin_email):
