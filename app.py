@@ -4,7 +4,6 @@ from collections import defaultdict
 from datetime import time, timedelta, timezone
 
 import streamlit as st
-from streamlit_cookies_controller import CookieController
 
 import common
 import check_stale_tickets
@@ -13,8 +12,8 @@ import lavender_auth
 import send_reminder
 import supabase_backend as backend
 
-SESSION_COOKIE = "qa_session_token"
-SESSION_MAX_AGE = 7 * 24 * 3600  # 7 hari
+SESSION_PARAM = "s"
+SESSION_MAX_AGE = 7 * 24 * 3600  # 7 hari (informational; token itself does not expire server-side)
 JAKARTA_TZ = timezone(timedelta(hours=7))
 
 st.set_page_config(page_title="QA Dashboard", layout="wide")
@@ -323,7 +322,7 @@ def show_lavender_connection_error(exc):
         st.warning("Gagal juga mendeteksi IP publik saat ini. Coba lagi beberapa saat.")
 
 
-def login_form(cookies):
+def login_form():
     col_left, col_mid, col_right = st.columns([1, 1.2, 1])
     with col_mid:
         st.markdown(
@@ -363,7 +362,7 @@ def login_form(cookies):
 
         token = backend.create_session(user_email, name)
 
-    cookies.set(SESSION_COOKIE, token, max_age=SESSION_MAX_AGE)
+    st.query_params[SESSION_PARAM] = token
     st.session_state.user = {
         "email": user_email,
         "name": name,
@@ -901,13 +900,11 @@ def page_settings(admin_email):
 
 
 def main():
-    cookies = CookieController()
-
     if "user" not in st.session_state:
         st.session_state.user = None
 
     if not st.session_state.user:
-        token = cookies.get(SESSION_COOKIE)
+        token = st.query_params.get(SESSION_PARAM)
         if token:
             with st.spinner("Memuat sesi..."):
                 session = backend.get_session(token)
@@ -919,19 +916,21 @@ def main():
                         "name": name,
                         "is_admin": lavender_auth.is_admin(email),
                     }
+            if not st.session_state.user:
+                st.query_params.pop(SESSION_PARAM, None)
 
     if not st.session_state.user:
-        login_form(cookies)
+        login_form()
         return
 
     user = st.session_state.user
     st.sidebar.write(f"Login sebagai **{user['name']}**")
     st.sidebar.caption(user["email"])
     if st.sidebar.button("Logout"):
-        token = cookies.get(SESSION_COOKIE)
+        token = st.query_params.get(SESSION_PARAM)
         if token:
             backend.delete_session(token)
-            cookies.remove(SESSION_COOKIE)
+        st.query_params.pop(SESSION_PARAM, None)
         st.session_state.user = None
         st.rerun()
 
