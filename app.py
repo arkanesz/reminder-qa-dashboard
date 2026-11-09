@@ -1,7 +1,7 @@
 import re
 import urllib.parse
 from collections import defaultdict
-from datetime import time, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import streamlit as st
 
@@ -121,6 +121,15 @@ def multiselect_with_reset(label, options, key, default=None):
     else:
         st.session_state[key] = [v for v in st.session_state[key] if v in options]
     return st.multiselect(label, options, key=key)
+
+
+def followed_up_today(followups, wa_logs):
+    today_wib = datetime.now(JAKARTA_TZ).date()
+    for row in list(followups) + list(wa_logs):
+        ts = row[-1]
+        if ts.astimezone(JAKARTA_TZ).date() == today_wib:
+            return True
+    return False
 
 
 def format_wa_number(raw):
@@ -565,15 +574,19 @@ def render_ticket_list_page(
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
         for issue_code, title, status, issue_link, days, hours, minutes in tickets:
+            ticket_proofs = followups_by_code.get(issue_code, [])
+            ticket_wa_log = wa_log_by_code.get(issue_code, [])
             label = f"[{issue_code}] {title} - {status} (H+{days}h {hours}j {minutes}m)"
+            if followed_up_today(ticket_proofs, ticket_wa_log):
+                label = f":green[✅ Sudah follow-up hari ini] — {label}"
             with st.expander(label):
                 st.markdown(f"[Buka tiket]({issue_link})")
                 render_followup_section(
                     issue_code,
                     current_user_email,
-                    initial_proofs=followups_by_code.get(issue_code, []),
+                    initial_proofs=ticket_proofs,
                     initial_signed_urls=signed_urls_by_path,
-                    initial_wa_log=wa_log_by_code.get(issue_code, []),
+                    initial_wa_log=ticket_wa_log,
                     wa_context={
                         "reporter": reporter,
                         "title": title,
