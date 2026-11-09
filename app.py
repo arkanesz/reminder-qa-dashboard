@@ -166,6 +166,7 @@ def render_followup_section(
     wa_context=None,
     phone_map=None,
     saved_phone_map=None,
+    base_label=None,
 ):
     initial_signed_urls = initial_signed_urls or {}
     state_key = f"proofs_state_{issue_code}"
@@ -173,150 +174,163 @@ def render_followup_section(
         st.session_state[state_key] = list(initial_proofs)
     proofs = st.session_state[state_key]
 
-    if proofs:
-        st.caption("Bukti follow-up sebelumnya:")
-        for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
-            cols = st.columns([1, 3, 1])
-            with cols[0]:
-                if storage_path:
-                    try:
-                        signed_url = initial_signed_urls.get(
-                            storage_path
-                        ) or cached_signed_url(storage_path)
-                        st.image(signed_url, width=160)
-                    except Exception:
-                        st.caption("(gagal muat gambar)")
-            with cols[1]:
-                st.write(f"Oleh: {uploaded_by}")
-                waktu_wib = created_at.astimezone(JAKARTA_TZ)
-                st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
-                if wa_number:
-                    st.write(f"Nomor WA: {wa_number}")
-                if note:
-                    st.write(f"Alasan: {note}")
-            with cols[2]:
-                if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
-                    backend.delete_followup(pid, storage_path)
-                    st.session_state[state_key] = [
-                        p for p in st.session_state[state_key] if p[0] != pid
-                    ]
-                    cached_followups_batch.clear()
-                    st.toast("Bukti follow-up dihapus.", icon="✅")
-                    st.rerun(scope="fragment")
-
-    uploaded_file = st.file_uploader(
-        "Upload screenshot bukti follow-up WA",
-        type=["png", "jpg", "jpeg"],
-        key=f"upload_{issue_code}",
-    )
-    note_input = st.text_area(
-        "Alasan mangkrak/warning dari reporter (opsional)",
-        key=f"note_{issue_code}",
-        height=68,
-    )
-    if uploaded_file is not None:
-        if st.button("Simpan Screenshot", key=f"save_{issue_code}"):
-            storage_path = backend.upload_screenshot(
-                issue_code,
-                uploaded_file.name,
-                uploaded_file.getbuffer(),
-                uploaded_file.type,
-            )
-            backend.add_followup(
-                issue_code, storage_path, "", note_input.strip(), current_user_email
-            )
-            st.session_state[state_key] = backend.get_followups(issue_code)
-            cached_followups_batch.clear()
-            st.toast("Screenshot bukti follow-up tersimpan.", icon="✅")
-            st.rerun(scope="fragment")
-
     wa_log_state_key = f"wa_log_state_{issue_code}"
     if wa_log_state_key not in st.session_state:
         st.session_state[wa_log_state_key] = list(initial_wa_log)
     wa_log = st.session_state[wa_log_state_key]
 
-    if wa_log:
-        st.caption("Riwayat kirim WA ke reporter:")
-        for log_id, reporter_log, phone_log, message_log, sent_by, sent_at in wa_log:
-            sent_at_wib = sent_at.astimezone(JAKARTA_TZ)
-            log_col1, log_col2 = st.columns([5, 1])
-            with log_col1:
-                st.write(
-                    f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
-                    f"{sent_by} kirim ke {reporter_log} ({phone_log})"
-                )
-            with log_col2:
-                if st.button("🗑️", key=f"delete_walog_{log_id}"):
-                    backend.delete_wa_log(log_id)
-                    st.session_state[wa_log_state_key] = [
-                        w for w in st.session_state[wa_log_state_key] if w[0] != log_id
-                    ]
-                    cached_wa_log_batch.clear()
-                    st.toast("Riwayat kirim WA dihapus.", icon="✅")
-                    st.rerun(scope="fragment")
+    def body():
+        if base_label is not None and wa_context and wa_context.get("issue_link"):
+            st.markdown(f"[Buka tiket]({wa_context['issue_link']})")
 
-    if not wa_context:
-        return
+        if proofs:
+            st.caption("Bukti follow-up sebelumnya:")
+            for pid, storage_path, wa_number, note, uploaded_by, created_at in proofs:
+                cols = st.columns([1, 3, 1])
+                with cols[0]:
+                    if storage_path:
+                        try:
+                            signed_url = initial_signed_urls.get(
+                                storage_path
+                            ) or cached_signed_url(storage_path)
+                            st.image(signed_url, width=160)
+                        except Exception:
+                            st.caption("(gagal muat gambar)")
+                with cols[1]:
+                    st.write(f"Oleh: {uploaded_by}")
+                    waktu_wib = created_at.astimezone(JAKARTA_TZ)
+                    st.write(f"Waktu: {waktu_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB")
+                    if wa_number:
+                        st.write(f"Nomor WA: {wa_number}")
+                    if note:
+                        st.write(f"Alasan: {note}")
+                with cols[2]:
+                    if st.button("🗑️ Hapus", key=f"delete_proof_{pid}"):
+                        backend.delete_followup(pid, storage_path)
+                        st.session_state[state_key] = [
+                            p for p in st.session_state[state_key] if p[0] != pid
+                        ]
+                        cached_followups_batch.clear()
+                        st.toast("Bukti follow-up dihapus.", icon="✅")
+                        st.rerun(scope="fragment")
 
-    reporter = wa_context["reporter"]
-    title = wa_context["title"]
-    status = wa_context["status"]
-    issue_link = wa_context["issue_link"]
-    days, hours, minutes = wa_context["days"], wa_context["hours"], wa_context["minutes"]
-    phone_map = phone_map or {}
-    saved_phone_map = saved_phone_map or {}
-
-    st.markdown("---")
-    st.caption("Kirim pesan follow-up ke WhatsApp reporter")
-
-    phone_state_key = f"saved_phone_{reporter}"
-    if phone_state_key not in st.session_state:
-        st.session_state[phone_state_key] = saved_phone_map.get(reporter)
-    saved_phone = st.session_state[phone_state_key]
-
-    default_phone = format_wa_number(saved_phone or phone_map.get(reporter, ""))
-    wa_number = st.text_input(
-        "Nomor WhatsApp reporter",
-        value=default_phone,
-        key=f"wa_num_{issue_code}",
-    )
-    wa_message = st.text_area(
-        "Pesan",
-        value=build_wa_message(issue_code, title, status, days, hours, minutes, issue_link),
-        key=f"wa_msg_{issue_code}",
-        height=120,
-    )
-    if wa_number:
-        formatted_number = format_wa_number(wa_number)
-        if formatted_number and formatted_number != saved_phone:
-            backend.save_reporter_phone(reporter, formatted_number)
-            cached_reporter_phones.clear()
-            st.session_state[phone_state_key] = formatted_number
-            saved_phone = formatted_number
-        wa_link = (
-            f"https://wa.me/{formatted_number}?text={urllib.parse.quote(wa_message)}"
+        uploaded_file = st.file_uploader(
+            "Upload screenshot bukti follow-up WA",
+            type=["png", "jpg", "jpeg"],
+            key=f"upload_{issue_code}",
         )
-        col_send, col_mark = st.columns(2)
-        with col_send:
-            st.link_button("Kirim WA ke Reporter", wa_link)
-        with col_mark:
-            if st.button("✅ Tandai sudah dikirim", key=f"mark_sent_{issue_code}"):
-                new_id, sent_at = backend.log_wa_sent(
-                    issue_code, reporter, formatted_number, wa_message, current_user_email
+        note_input = st.text_area(
+            "Alasan mangkrak/warning dari reporter (opsional)",
+            key=f"note_{issue_code}",
+            height=68,
+        )
+        if uploaded_file is not None:
+            if st.button("Simpan Screenshot", key=f"save_{issue_code}"):
+                storage_path = backend.upload_screenshot(
+                    issue_code,
+                    uploaded_file.name,
+                    uploaded_file.getbuffer(),
+                    uploaded_file.type,
                 )
-                existing_ids = {w[0] for w in st.session_state[wa_log_state_key]}
-                if new_id not in existing_ids:
-                    st.session_state[wa_log_state_key].append(
-                        (new_id, reporter, formatted_number, wa_message, current_user_email, sent_at)
-                    )
-                cached_wa_log_batch.clear()
-                st.toast("Dicatat di riwayat kirim WA.", icon="✅")
+                backend.add_followup(
+                    issue_code, storage_path, "", note_input.strip(), current_user_email
+                )
+                st.session_state[state_key] = backend.get_followups(issue_code)
+                cached_followups_batch.clear()
+                st.toast("Screenshot bukti follow-up tersimpan.", icon="✅")
                 st.rerun(scope="fragment")
-    else:
-        st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
 
-    if saved_phone:
-        st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
+        if wa_log:
+            st.caption("Riwayat kirim WA ke reporter:")
+            for log_id, reporter_log, phone_log, message_log, sent_by, sent_at in wa_log:
+                sent_at_wib = sent_at.astimezone(JAKARTA_TZ)
+                log_col1, log_col2 = st.columns([5, 1])
+                with log_col1:
+                    st.write(
+                        f"- {sent_at_wib.strftime('%Y-%m-%d %H:%M:%S')} WIB — "
+                        f"{sent_by} kirim ke {reporter_log} ({phone_log})"
+                    )
+                with log_col2:
+                    if st.button("🗑️", key=f"delete_walog_{log_id}"):
+                        backend.delete_wa_log(log_id)
+                        st.session_state[wa_log_state_key] = [
+                            w for w in st.session_state[wa_log_state_key] if w[0] != log_id
+                        ]
+                        cached_wa_log_batch.clear()
+                        st.toast("Riwayat kirim WA dihapus.", icon="✅")
+                        st.rerun(scope="fragment")
+
+        if not wa_context:
+            return
+
+        reporter = wa_context["reporter"]
+        title = wa_context["title"]
+        status = wa_context["status"]
+        issue_link = wa_context["issue_link"]
+        days, hours, minutes = wa_context["days"], wa_context["hours"], wa_context["minutes"]
+        phone_map_local = phone_map or {}
+        saved_phone_map_local = saved_phone_map or {}
+
+        st.markdown("---")
+        st.caption("Kirim pesan follow-up ke WhatsApp reporter")
+
+        phone_state_key = f"saved_phone_{reporter}"
+        if phone_state_key not in st.session_state:
+            st.session_state[phone_state_key] = saved_phone_map_local.get(reporter)
+        saved_phone = st.session_state[phone_state_key]
+
+        default_phone = format_wa_number(saved_phone or phone_map_local.get(reporter, ""))
+        wa_number = st.text_input(
+            "Nomor WhatsApp reporter",
+            value=default_phone,
+            key=f"wa_num_{issue_code}",
+        )
+        wa_message = st.text_area(
+            "Pesan",
+            value=build_wa_message(issue_code, title, status, days, hours, minutes, issue_link),
+            key=f"wa_msg_{issue_code}",
+            height=120,
+        )
+        if wa_number:
+            formatted_number = format_wa_number(wa_number)
+            if formatted_number and formatted_number != saved_phone:
+                backend.save_reporter_phone(reporter, formatted_number)
+                cached_reporter_phones.clear()
+                st.session_state[phone_state_key] = formatted_number
+                saved_phone = formatted_number
+            wa_link = (
+                f"https://wa.me/{formatted_number}?text={urllib.parse.quote(wa_message)}"
+            )
+            col_send, col_mark = st.columns(2)
+            with col_send:
+                st.link_button("Kirim WA ke Reporter", wa_link)
+            with col_mark:
+                if st.button("✅ Tandai sudah dikirim", key=f"mark_sent_{issue_code}"):
+                    new_id, sent_at = backend.log_wa_sent(
+                        issue_code, reporter, formatted_number, wa_message, current_user_email
+                    )
+                    existing_ids = {w[0] for w in st.session_state[wa_log_state_key]}
+                    if new_id not in existing_ids:
+                        st.session_state[wa_log_state_key].append(
+                            (new_id, reporter, formatted_number, wa_message, current_user_email, sent_at)
+                        )
+                    cached_wa_log_batch.clear()
+                    st.toast("Dicatat di riwayat kirim WA.", icon="✅")
+                    st.rerun(scope="fragment")
+        else:
+            st.caption("Isi nomor WA dulu untuk mengaktifkan tombol kirim.")
+
+        if saved_phone:
+            st.caption(f"📌 Nomor tersimpan untuk {reporter}: {saved_phone}")
+
+    if base_label is not None:
+        label = base_label
+        if followed_up_today(proofs, wa_log):
+            label = f":green[✅ Sudah follow-up hari ini] — {label}"
+        with st.expander(label):
+            body()
+    else:
+        body()
 
 
 def show_lavender_connection_error(exc):
@@ -576,29 +590,26 @@ def render_ticket_list_page(
         for issue_code, title, status, issue_link, days, hours, minutes in tickets:
             ticket_proofs = followups_by_code.get(issue_code, [])
             ticket_wa_log = wa_log_by_code.get(issue_code, [])
-            label = f"[{issue_code}] {title} - {status} (H+{days}h {hours}j {minutes}m)"
-            if followed_up_today(ticket_proofs, ticket_wa_log):
-                label = f":green[✅ Sudah follow-up hari ini] — {label}"
-            with st.expander(label):
-                st.markdown(f"[Buka tiket]({issue_link})")
-                render_followup_section(
-                    issue_code,
-                    current_user_email,
-                    initial_proofs=ticket_proofs,
-                    initial_signed_urls=signed_urls_by_path,
-                    initial_wa_log=ticket_wa_log,
-                    wa_context={
-                        "reporter": reporter,
-                        "title": title,
-                        "status": status,
-                        "issue_link": issue_link,
-                        "days": days,
-                        "hours": hours,
-                        "minutes": minutes,
-                    },
-                    phone_map=phone_map,
-                    saved_phone_map=saved_phone_map,
-                )
+            base_label = f"[{issue_code}] {title} - {status} (H+{days}h {hours}j {minutes}m)"
+            render_followup_section(
+                issue_code,
+                current_user_email,
+                initial_proofs=ticket_proofs,
+                initial_signed_urls=signed_urls_by_path,
+                initial_wa_log=ticket_wa_log,
+                wa_context={
+                    "reporter": reporter,
+                    "title": title,
+                    "status": status,
+                    "issue_link": issue_link,
+                    "days": days,
+                    "hours": hours,
+                    "minutes": minutes,
+                },
+                phone_map=phone_map,
+                saved_phone_map=saved_phone_map,
+                base_label=base_label,
+            )
 
 
 def page_stale(current_user_email):
