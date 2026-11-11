@@ -24,6 +24,14 @@ SELECT
     i.created_at
   ) AS status_changed_at,
   (
+    SELECT ia.created_at
+    FROM issue_activities ia
+    WHERE ia.issue_id = i.id
+      AND ia.field_name = 'status_id'
+    ORDER BY ia.created_at DESC
+    OFFSET 1 LIMIT 1
+  ) AS prev_status_changed_at,
+  (
     SELECT MAX(c.created_at)
     FROM comments c
     WHERE c.issue_id = i.id
@@ -44,20 +52,31 @@ ORDER BY us1.name ASC;
 """
 
 
+# Fallback window used only when a ticket has no earlier status change on record
+# (e.g. created directly as Done QA) and prev_status_changed_at is unavailable.
 COMMENT_TOLERANCE = timedelta(minutes=10)
 
 
-def reporter_has_commented(status_changed_at, last_reporter_comment_at):
-    if status_changed_at is None or last_reporter_comment_at is None:
+def reporter_has_commented(status_changed_at, prev_status_changed_at, last_reporter_comment_at):
+    if last_reporter_comment_at is None:
+        return False
+    if prev_status_changed_at is not None:
+        # Counts as "commented" as long as the reporter's comment was made any time
+        # since the ticket entered the status it was in right before Done QA (the
+        # testing/review round that led to this Done QA) - not just strictly after
+        # the Done QA transition itself, since in practice someone reads the
+        # reporter's confirmation comment and only then flips the status.
+        return last_reporter_comment_at >= prev_status_changed_at
+    if status_changed_at is None:
         return False
     return last_reporter_comment_at >= status_changed_at - COMMENT_TOLERANCE
 
 
 def group_tickets(rows):
     by_reporter = defaultdict(list)
-    for reporter, issue_code, title, issue_link, status_changed_at, last_reporter_comment_at in rows:
+    for reporter, issue_code, title, issue_link, status_changed_at, prev_status_changed_at, last_reporter_comment_at in rows:
         reporter = reporter or "(Tanpa Reporter)"
-        commented = reporter_has_commented(status_changed_at, last_reporter_comment_at)
+        commented = reporter_has_commented(status_changed_at, prev_status_changed_at, last_reporter_comment_at)
         by_reporter[reporter].append(
             (issue_code, title, issue_link, status_changed_at, last_reporter_comment_at, commented)
         )
