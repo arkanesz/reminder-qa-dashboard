@@ -525,9 +525,12 @@ def page_done_qa():
         telegram_bot_caption()
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("Total Tiket Done QA", total)
-    m2.metric("Sudah Komen", sudah)
-    m3.metric("Belum Komen", belum)
+    with m1, st.container(border=True):
+        st.metric("Total Tiket Done QA", total)
+    with m2, st.container(border=True):
+        st.metric("✅ Sudah Komen", sudah)
+    with m3, st.container(border=True):
+        st.metric("⚠️ Belum Komen", belum)
 
     for reporter, tickets in grouped.items():
         st.subheader(reporter)
