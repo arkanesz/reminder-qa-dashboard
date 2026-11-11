@@ -6,6 +6,7 @@ from datetime import datetime, time, timedelta, timezone
 import streamlit as st
 
 import common
+import check_done_qa
 import check_stale_tickets
 import generate_report
 import lavender_auth
@@ -488,6 +489,68 @@ def page_report():
 
 
 DASHBOARD_STATUS_OPTIONS = check_stale_tickets.ALL_STALE_STATUSES + ["Done QA"]
+
+
+def page_done_qa():
+    st.header("Done QA - Cek Komentar Reporter")
+    st.caption(
+        "Tiket dengan status Done QA. Syarat siap rilis: status sudah Done QA DAN "
+        "reporter sudah komen di tiketnya setelah status berubah. Tombol \"Kirim ke "
+        "Telegram\" memformat pesan ini untuk di-share."
+    )
+
+    with st.spinner("Memuat data tiket..."):
+        rows = cached_query(check_done_qa.QUERY)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Refresh data", key="refresh_done_qa"):
+            cached_query.clear()
+            st.rerun()
+
+    if not rows:
+        st.info("Tidak ada tiket dengan status Done QA saat ini.")
+        return
+
+    grouped = check_done_qa.group_tickets(rows)
+    total = sum(len(v) for v in grouped.values())
+    sudah = sum(1 for tickets in grouped.values() for t in tickets if t[5])
+    belum = total - sudah
+
+    with col2:
+        if st.button("Kirim ke Telegram", key="btn_send_done_qa"):
+            message = check_done_qa.build_message(grouped)
+            common.send_telegram(message)
+            st.success(f"Terkirim ke Telegram ({total} tiket, {belum} belum komen).")
+        telegram_bot_caption()
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Tiket Done QA", total)
+    m2.metric("Sudah Komen", sudah)
+    m3.metric("Belum Komen", belum)
+
+    for reporter, tickets in grouped.items():
+        st.subheader(reporter)
+        for issue_code, title, issue_link, status_changed_at, last_reporter_comment_at, commented in tickets:
+            status_wib = status_changed_at.astimezone(JAKARTA_TZ).strftime("%Y-%m-%d %H:%M:%S") if status_changed_at else "-"
+            if commented:
+                label = f":green[✅ Sudah komen] — [{issue_code}] {title}"
+            else:
+                label = f":orange[⚠️ Belum komen] — [{issue_code}] {title}"
+            with st.expander(label):
+                st.markdown(f"[Buka tiket]({issue_link})")
+                st.write(f"Jadi Done QA: {status_wib} WIB")
+                if commented:
+                    comment_wib = last_reporter_comment_at.astimezone(JAKARTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                    st.write(f"Komentar terakhir reporter: {comment_wib} WIB")
+                    st.success("Reporter sudah komen setelah status Done QA — siap dicek untuk rilis.")
+                else:
+                    if last_reporter_comment_at:
+                        comment_wib = last_reporter_comment_at.astimezone(JAKARTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        st.write(f"Komentar terakhir reporter: {comment_wib} WIB (sebelum status jadi Done QA)")
+                    else:
+                        st.write("Reporter belum pernah komen di tiket ini.")
+                    st.warning("Reporter belum komen sejak status jadi Done QA — belum memenuhi syarat rilis.")
 
 
 def render_ticket_list_page(
@@ -977,6 +1040,7 @@ def main():
             st.Page(page_reminder, title="Reminder QA", icon="📋", url_path="reminder", default=True),
             st.Page(page_report, title="Report Rekap", icon="📊", url_path="report"),
             st.Page(page_summary, title="Summary", icon="📈", url_path="summary"),
+            st.Page(page_done_qa, title="Done QA", icon="✅", url_path="done-qa"),
         ],
         "Follow Up": [
             st.Page(
