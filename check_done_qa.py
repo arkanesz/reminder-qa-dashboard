@@ -44,10 +44,13 @@ ORDER BY us1.name ASC;
 """
 
 
+COMMENT_TOLERANCE = timedelta(minutes=10)
+
+
 def reporter_has_commented(status_changed_at, last_reporter_comment_at):
     if status_changed_at is None or last_reporter_comment_at is None:
         return False
-    return last_reporter_comment_at >= status_changed_at
+    return last_reporter_comment_at >= status_changed_at - COMMENT_TOLERANCE
 
 
 def group_tickets(rows):
