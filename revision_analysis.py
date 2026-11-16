@@ -29,11 +29,17 @@ ORDER BY us1.name ASC;
 """
 
 COMMENTS_QUERY = """
-SELECT c.author_id, c.created_at, c.body_md
+SELECT c.author_id, cu.name AS author_name, cu.email AS author_email, c.created_at, c.body_md
 FROM comments c
+LEFT JOIN users cu ON cu.id = c.author_id
 WHERE c.issue_id = %(issue_id)s AND c.deleted_at IS NULL
 ORDER BY c.created_at ASC
 """
+
+# Faris reviews/helps out after the reporter sets a ticket to Revision, so his
+# comments should count as part of the same explanation too, not just the
+# reporter's own.
+AUTHORIZED_COMMENTER_EMAIL = "faris@prestisa.com"
 
 SUBTASK_QUERY = """
 SELECT
@@ -59,11 +65,11 @@ ANALYSIS_SYSTEM_PROMPT = (
     "valid, tanpa teks lain di luar JSON, dan tanpa markdown code fence."
 )
 
-ANALYSIS_PROMPT = """Tiket parent ini diubah statusnya menjadi "Revision" oleh reporter setelah testing, tapi status subtask-nya tidak otomatis ikut berubah. Tentukan subtask mana yang seharusnya ikut diubah ke Revision, berdasarkan komentar (dan screenshot, jika ada) dari reporter.
+ANALYSIS_PROMPT = """Tiket parent ini diubah statusnya menjadi "Revision" oleh reporter setelah testing, tapi status subtask-nya tidak otomatis ikut berubah. Tentukan subtask mana yang seharusnya ikut diubah ke Revision, berdasarkan komentar (dan screenshot, jika ada) dari reporter dan/atau Faris (yang kadang menambahkan komentar sesudah reporter untuk memperjelas).
 
 Judul tiket parent: {parent_title}
 
-Komentar reporter (diurutkan dari paling lama ke paling baru, ini rentetan komentar terakhirnya sebelum tiket masuk Revision):
+Komentar reporter/Faris (diurutkan dari paling lama ke paling baru, ini rentetan komentar terakhir mereka sebelum tiket masuk Revision):
 {comment_block}
 
 Daftar subtask dari tiket parent ini (judul + deskripsi):
@@ -91,16 +97,20 @@ def get_subtasks(parent_issue_id):
 
 def get_trailing_reporter_comments(issue_id, reporter_id):
     """Walks backward from the newest comment, collecting the consecutive run
-    written by the reporter (they often explain a Revision across several
-    messages in a row). Stops as soon as a comment from someone else is hit.
-    Falls back to just the single most recent reporter comment if the very
-    last comment on the issue isn't theirs."""
+    written by the reporter OR by Faris (AUTHORIZED_COMMENTER_EMAIL) - he
+    often adds his own comment right after the reporter sets a ticket to
+    Revision. Stops as soon as a comment from someone else is hit. Falls back
+    to just the single most recent reporter/Faris comment if the very last
+    comment on the issue isn't from either of them."""
     rows = run_query(COMMENTS_QUERY, {"issue_id": issue_id})
 
+    def is_allowed(author_id, author_email):
+        return author_id == reporter_id or author_email == AUTHORIZED_COMMENTER_EMAIL
+
     trailing = []
-    for author_id, created_at, body in reversed(rows):
-        if author_id == reporter_id:
-            trailing.append((created_at, body))
+    for author_id, author_name, author_email, created_at, body in reversed(rows):
+        if is_allowed(author_id, author_email):
+            trailing.append((author_name, created_at, body))
         else:
             break
     trailing.reverse()
@@ -108,8 +118,12 @@ def get_trailing_reporter_comments(issue_id, reporter_id):
     if trailing:
         return trailing
 
-    reporter_rows = [(created_at, body) for author_id, created_at, body in rows if author_id == reporter_id]
-    return reporter_rows[-1:]
+    allowed_rows = [
+        (author_name, created_at, body)
+        for author_id, author_name, author_email, created_at, body in rows
+        if is_allowed(author_id, author_email)
+    ]
+    return allowed_rows[-1:]
 
 
 def _empty_result(reasoning):
@@ -122,7 +136,7 @@ def _download_images(comments, tmp_dir):
     url_to_path = {}
     processed = []
 
-    for created_at, body in comments:
+    for author_name, created_at, body in comments:
         body = body or ""
 
         def _replace(match):
@@ -142,7 +156,7 @@ def _download_images(comments, tmp_dir):
                     return "[gagal download gambar]"
             return f" @{url_to_path[url]} "
 
-        processed.append((created_at, IMAGE_URL_RE.sub(_replace, body)))
+        processed.append((author_name, created_at, IMAGE_URL_RE.sub(_replace, body)))
 
     return processed
 
@@ -181,8 +195,8 @@ def _call_claude_code(prompt):
 def analyze_revision_comment(parent_title, issue_id, reporter_id, subtasks):
     """subtasks: list of (issue_code, title, description, status, issue_link) tuples."""
     comments = get_trailing_reporter_comments(issue_id, reporter_id)
-    if not comments or not any((body or "").strip() for _, body in comments):
-        return _empty_result("Reporter belum menulis komentar di tiket ini, tidak ada yang bisa dianalisa."), []
+    if not comments or not any((body or "").strip() for _, _, body in comments):
+        return _empty_result("Reporter/Faris belum menulis komentar di tiket ini, tidak ada yang bisa dianalisa."), []
     if not subtasks:
         return _empty_result("Tiket ini tidak punya subtask."), []
 
@@ -190,8 +204,8 @@ def analyze_revision_comment(parent_title, issue_id, reporter_id, subtasks):
     try:
         processed_comments = _download_images(comments, tmp_dir)
         comment_block = "\n\n".join(
-            f"--- Komentar ({created_at.strftime('%Y-%m-%d %H:%M')} WIB) ---\n{body}"
-            for created_at, body in processed_comments
+            f"--- Komentar oleh {author_name} ({created_at.strftime('%Y-%m-%d %H:%M')} WIB) ---\n{body}"
+            for author_name, created_at, body in processed_comments
         )
 
         subtask_list_text = "\n".join(
@@ -253,7 +267,8 @@ def main():
             print(f"Gagal menganalisa: {e}\n")
             continue
 
-        print(f"Jumlah komentar reporter yang dianalisa: {len(comments)}")
+        commenters = ", ".join(dict.fromkeys(name for name, _, _ in comments)) if comments else "-"
+        print(f"Jumlah komentar yang dianalisa: {len(comments)} (oleh: {commenters})")
         codes = result.get("recommended_codes", [])
         if codes:
             print(f">> Rekomendasi: ubah subtask {', '.join(codes)} ke status Revision")
