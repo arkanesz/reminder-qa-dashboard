@@ -25,6 +25,7 @@ WHERE
   wfstat.name = 'Revision'
   AND (itp.name != 'Sub-task' OR itp.name IS NULL)
   AND i.parent_issue_id IS NULL
+  AND i.deleted_at IS NULL
 ORDER BY us1.name ASC;
 """
 
@@ -52,6 +53,7 @@ FROM issues s
 LEFT JOIN projects p ON s.project_id = p.id
 LEFT JOIN workflow_statuses wfstat ON wfstat.id = s.status_id
 WHERE s.parent_issue_id = %(parent_id)s
+  AND s.deleted_at IS NULL
 ORDER BY s.key_num ASC;
 """
 
