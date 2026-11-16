@@ -9,9 +9,10 @@ echo ====================================
 echo   1. Kirim Reminder QA
 echo   2. Generate Report Ready for QA
 echo   3. Cek Tiket Mangkrak ^(^> 24 Jam^)
+echo   4. Analisa Revisi Subtask ^(pakai Claude Code^)
 echo   0. Keluar
 echo ====================================
-set /p PILIHAN="Pilih opsi (0/1/2/3): "
+set /p PILIHAN="Pilih opsi (0/1/2/3/4): "
 
 if "%PILIHAN%"=="1" (
     python send_reminder.py
@@ -19,6 +20,8 @@ if "%PILIHAN%"=="1" (
     python generate_report.py
 ) else if "%PILIHAN%"=="3" (
     goto stale_menu
+) else if "%PILIHAN%"=="4" (
+    python revision_analysis.py
 ) else if "%PILIHAN%"=="0" (
     goto end
 ) else (
