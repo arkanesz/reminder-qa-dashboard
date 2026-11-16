@@ -500,7 +500,7 @@ def page_done_qa():
     )
 
     with st.spinner("Memuat data tiket..."):
-        rows = cached_query(check_done_qa.QUERY)
+        rows = cached_query(check_done_qa.QUERY, check_done_qa.QUERY_PARAMS)
 
     col1, col2 = st.columns(2)
     with col1:

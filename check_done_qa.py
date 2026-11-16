@@ -6,6 +6,13 @@ from common import run_query, send_telegram
 
 JAKARTA_TZ = timezone(timedelta(hours=7))
 
+# A comment from this user also counts as "reporter sudah komen" - Faris reviews
+# and approves releases himself, so his comment on behalf of/alongside the
+# reporter satisfies the release requirement too.
+AUTHORIZED_RELEASE_COMMENTER_EMAIL = "faris@prestisa.com"
+
+QUERY_PARAMS = {"authorized_email": AUTHORIZED_RELEASE_COMMENTER_EMAIL}
+
 QUERY = """
 SELECT
   us1.name AS reporter,
@@ -34,9 +41,10 @@ SELECT
   (
     SELECT MAX(c.created_at)
     FROM comments c
+    LEFT JOIN users cu ON cu.id = c.author_id
     WHERE c.issue_id = i.id
-      AND c.author_id = i.reporter_id
       AND c.deleted_at IS NULL
+      AND (c.author_id = i.reporter_id OR cu.email = %(authorized_email)s)
   ) AS last_reporter_comment_at
 FROM issues i
 LEFT JOIN issues parent ON parent.id = i.parent_issue_id
@@ -99,7 +107,7 @@ def build_message(grouped):
 
 
 def main():
-    rows = run_query(QUERY)
+    rows = run_query(QUERY, QUERY_PARAMS)
     if not rows:
         print("Tidak ada tiket dengan status Done QA saat ini.")
         return
